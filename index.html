@@ -1583,21 +1583,21 @@
 
         html.mobile-layout .card-header { padding: 16px; }
 
-        html.mobile-layout .collapsible-card .card-title-row {
+        .collapsible-card .card-title-row {
             cursor: pointer;
             -webkit-tap-highlight-color: transparent;
             flex: 1;
         }
 
-        html.mobile-layout .collapsible-card .collapsible-body {
+        .collapsible-card .collapsible-body {
             display: none;
         }
 
-        html.mobile-layout .collapsible-card.expanded .collapsible-body {
+        .collapsible-card.expanded .collapsible-body {
             display: block;
         }
 
-        html.mobile-layout .collapsible-card.expanded .collapsible-toggle-icon {
+        .collapsible-card.expanded .collapsible-toggle-icon {
             transform: rotate(180deg);
         }
 
@@ -2118,7 +2118,7 @@
                             <div class="card-header">
                                 <div class="card-title-row" onclick="toggleCollapsibleCard(this)">
                                     <div class="card-title">Позиции</div>
-                                    <span class="collapsible-toggle-icon mobile-only">▾</span>
+                                    <span class="collapsible-toggle-icon">▾</span>
                                 </div>
                                 <button class="btn btn-outline btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
                             </div>
@@ -2154,7 +2154,7 @@
                             <div class="card-header">
                                 <div class="card-title-row" onclick="toggleCollapsibleCard(this)">
                                     <div class="card-title">История сделок</div>
-                                    <span class="collapsible-toggle-icon mobile-only">▾</span>
+                                    <span class="collapsible-toggle-icon">▾</span>
                                 </div>
                             </div>
                             <div class="table-wrap collapsible-body">
