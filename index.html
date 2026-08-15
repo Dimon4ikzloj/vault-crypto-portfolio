@@ -301,6 +301,18 @@
 
         .card-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
+        .card-title-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .collapsible-toggle-icon {
+            font-size: 12px;
+            color: var(--cyan);
+            transition: transform 0.2s ease;
+        }
+
         .card-body { padding: 0 24px 24px; }
         .card-body-pad { padding: 24px; }
 
@@ -1571,6 +1583,24 @@
 
         html.mobile-layout .card-header { padding: 16px; }
 
+        html.mobile-layout .collapsible-card .card-title-row {
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            flex: 1;
+        }
+
+        html.mobile-layout .collapsible-card .collapsible-body {
+            display: none;
+        }
+
+        html.mobile-layout .collapsible-card.expanded .collapsible-body {
+            display: block;
+        }
+
+        html.mobile-layout .collapsible-card.expanded .collapsible-toggle-icon {
+            transform: rotate(180deg);
+        }
+
         html.mobile-layout .card-body,
         html.mobile-layout .card-body-pad {
             padding-left: 16px;
@@ -2084,12 +2114,15 @@
                         </div>
 
                         <!-- Positions -->
-                        <div class="card" id="positions">
+                        <div class="card collapsible-card" id="positions">
                             <div class="card-header">
-                                <div class="card-title">Позиции</div>
+                                <div class="card-title-row" onclick="toggleCollapsibleCard(this)">
+                                    <div class="card-title">Позиции</div>
+                                    <span class="collapsible-toggle-icon mobile-only">▾</span>
+                                </div>
                                 <button class="btn btn-outline btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
                             </div>
-                            <div class="table-wrap">
+                            <div class="table-wrap collapsible-body">
                                 <table class="responsive-table positions-table">
                                     <thead>
                                         <tr>
@@ -2117,11 +2150,14 @@
                         </div>
 
                         <!-- History -->
-                        <div class="card" id="history">
+                        <div class="card collapsible-card" id="history">
                             <div class="card-header">
-                                <div class="card-title">История сделок</div>
+                                <div class="card-title-row" onclick="toggleCollapsibleCard(this)">
+                                    <div class="card-title">История сделок</div>
+                                    <span class="collapsible-toggle-icon mobile-only">▾</span>
+                                </div>
                             </div>
-                            <div class="table-wrap">
+                            <div class="table-wrap collapsible-body">
                                 <table class="responsive-table history-table">
                                     <thead>
                                         <tr>
@@ -2324,7 +2360,7 @@
         <input id="qTotal" type="number">
         <input id="qPrice" type="number">
         <input id="qAmount" type="number">
-        <input id="qDate" type="date">
+        <input id="qDate" type="date" autocomplete="off" oninput="qDateTouched = true;">
         <input id="qFee" type="number" value="0">
     </form>
 
@@ -2349,7 +2385,7 @@
                         </div>
                         <div class="form-group">
                             <label class="form-label">Дата</label>
-                            <input type="date" class="form-input" id="mDate" required>
+                            <input type="date" class="form-input" id="mDate" autocomplete="off" oninput="mDateTouched = true;" required>
                         </div>
                     </div>
                     <div class="form-group coin-picker-wrap" id="mCoinPickerWrap">
@@ -2512,8 +2548,39 @@
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
 
-        document.getElementById('qDate').value = new Date().toISOString().split('T')[0];
-        document.getElementById('mDate').value = new Date().toISOString().split('T')[0];
+        var qDateTouched = false;
+        var mDateTouched = false;
+
+        function todayIso() {
+            // Важно: НЕ используем new Date().toISOString() — это UTC-время, и при
+            // часовых поясах впереди UTC (например, UTC+5) вечером получается дата
+            // "завтра", а позади UTC — "вчера". Берём локальные компоненты даты.
+            var d = new Date();
+            var month = String(d.getMonth() + 1).padStart(2, '0');
+            var day = String(d.getDate()).padStart(2, '0');
+            return d.getFullYear() + '-' + month + '-' + day;
+        }
+
+        // Поле "Дата" по умолчанию должно всегда показывать реальный сегодняшний день.
+        // Если вкладку/PWA оставить открытой на несколько дней (модалка открыта заранее,
+        // либо страница просто не перезагружалась), JS-значение, выставленное один раз при
+        // загрузке, "залипает" на старой дате — сделки сохраняются с неверной (старой) датой.
+        // Поэтому пересинхронизируем дату при каждом возврате фокуса/видимости вкладки,
+        // но только если пользователь не менял её вручную (иначе не затираем сделку "задним числом").
+        function refreshDefaultTradeDates() {
+            var today = todayIso();
+            var qDate = document.getElementById('qDate');
+            var mDate = document.getElementById('mDate');
+            if (qDate && !qDateTouched && qDate.value !== today) qDate.value = today;
+            if (mDate && !mDateTouched && mDate.value !== today) mDate.value = today;
+        }
+
+        refreshDefaultTradeDates();
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) refreshDefaultTradeDates();
+        });
+        window.addEventListener('focus', refreshDefaultTradeDates);
+        window.addEventListener('pageshow', refreshDefaultTradeDates);
 
         function setActiveNav(sectionId) {
             document.querySelectorAll('.mob-nav-btn[data-section]').forEach(function(btn) {
@@ -3297,6 +3364,11 @@
             document.body.classList.remove('modal-open');
         }
 
+        function toggleCollapsibleCard(el) {
+            var card = el.closest('.collapsible-card');
+            if (card) card.classList.toggle('expanded');
+        }
+
         function toggleChartInfoPanel() {
             var panel = document.getElementById('chartCoinPanel');
             var icon = document.getElementById('chartPanelToggleIcon');
@@ -3356,7 +3428,8 @@
             }
             document.getElementById('modal').classList.add('active');
             document.body.classList.add('modal-open');
-            document.getElementById('mDate').value = new Date().toISOString().split('T')[0];
+            mDateTouched = false;
+            document.getElementById('mDate').value = todayIso();
             document.getElementById('mCoinSearch').value = '';
             updateTransactionFormFields();
         }
@@ -3876,7 +3949,8 @@
                         document.getElementById('mScamTotal').value = '';
                         document.getElementById('mTradeAmount').value = '';
                         document.getElementById('mTradeHint').textContent = '';
-                        document.getElementById(prefix + 'Date').value = new Date().toISOString().split('T')[0];
+                        if (isModal) mDateTouched = false; else qDateTouched = false;
+                        document.getElementById(prefix + 'Date').value = todayIso();
                         if (isModal) {
                             document.getElementById('mFee').value = '0';
                             updateTransactionFormFields();
