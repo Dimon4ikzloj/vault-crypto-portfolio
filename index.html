@@ -4547,7 +4547,7 @@
 
             var legendHTML = '';
             chartData.labels.forEach(function(lbl, i) {
-                var pct = total > 0 ? (chartData.values[i] / total * 100).toFixed(1) : 0;
+                var pct = total > 0 ? (chartData.values[i] / total * 100).toFixed(2) : 0;
                 var coinKey = chartData.coins && chartData.coins[i] ? chartData.coins[i] : null;
                 var itemClass = coinKey ? 'legend-item clickable' : 'legend-item';
                 var clickAttr = coinKey ? ' onclick="selectPortfolioChartCoin(\'' + jsEscape(coinKey) + '\')"' : '';
