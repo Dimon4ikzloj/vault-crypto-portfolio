@@ -1025,6 +1025,138 @@ function deleteTransaction(id) {
 }
 
 /**
+ * Редактирование существующей сделки — та же логика валидации/пересчёта, что и в
+ * addTransaction, но обновляет строку по ID вместо добавления новой. Строка,
+ * которая редактируется, исключается из расчёта баланса/средней цены покупки,
+ * чтобы можно было менять сумму/количество без ложного "недостаточно монет".
+ */
+function updateTransaction(data) {
+  const info = getDealsSheet(false);
+  const sheet = info.sheet;
+  if (!sheet) return { success: false, error: 'Лист «Сделки» не найден' };
+
+  const targetId = normalizeTxId(data.id);
+  if (!targetId) return { success: false, error: 'Не указан ID сделки' };
+
+  const allData = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  for (let i = 1; i < allData.length; i++) {
+    if (normalizeTxId(allData[i][0], i + 1) === targetId) {
+      rowIndex = i;
+      break;
+    }
+  }
+  if (rowIndex === -1) return { success: false, error: 'Сделка не найдена' };
+
+  const txType = normalizeTxType(data.type);
+  if (txType !== 'Покупка' && txType !== 'Продажа' && txType !== 'Аирдроп' && txType !== 'Скам') {
+    return { success: false, error: 'Неизвестный тип сделки: ' + data.type };
+  }
+
+  const coinFormatted = normalizeCoinKey(data.coin);
+  const isAirdrop = txType === 'Аирдроп';
+  const isScam = txType === 'Скам';
+  let amount = parseFloat(data.amount) || 0;
+  let price = parseFloat(data.price) || 0;
+  let total = parseFloat(data.total) || 0;
+  let fee = parseFloat(data.fee) || 0;
+
+  if (isAirdrop) {
+    price = 0;
+    total = 0;
+    fee = 0;
+  } else if (isScam) {
+    total = parseSheetNumber(data.total);
+    if (total <= 0) {
+      return { success: false, error: 'Укажите сумму вложений в скам-монету' };
+    }
+    amount = 1;
+    price = total;
+    fee = 0;
+  }
+
+  if (!coinFormatted) {
+    return { success: false, error: 'Укажите монету' };
+  }
+  if (!isScam && amount <= 0) {
+    return { success: false, error: isAirdrop ? 'Укажите количество монет из аирдропа' : 'Количество должно быть больше 0' };
+  }
+  if (!isAirdrop && !isScam && (price <= 0 || total <= 0)) {
+    return { success: false, error: 'Укажите цену и сумму сделки' };
+  }
+
+  if (txType === 'Продажа') {
+    let currentBalance = 0;
+    for (let i = 1; i < allData.length; i++) {
+      if (i === rowIndex) continue;
+      const rowCoin = String(allData[i][2]).toUpperCase().trim();
+      const rowType = normalizeTxType(allData[i][1]);
+      if (rowCoin === coinFormatted && normalizeTxId(allData[i][0], i + 1)) {
+        if (isAcquisitionType(rowType)) {
+          currentBalance += parseFloat(allData[i][3]) || 0;
+        } else if (rowType === 'Продажа') {
+          currentBalance -= parseFloat(allData[i][3]) || 0;
+        }
+      }
+    }
+    if (currentBalance < amount - 0.000001) {
+      return {success: false, error: 'Недостаточно монет в портфеле для продажи!'};
+    }
+  }
+
+  const coinAcquisitions = [];
+  for (let i = 1; i < allData.length; i++) {
+    if (i === rowIndex) continue;
+    const rowCoin = String(allData[i][2]).toUpperCase().trim();
+    const rowType = normalizeTxType(allData[i][1]);
+    if (rowCoin === coinFormatted && isAcquisitionType(rowType) && normalizeTxId(allData[i][0], i + 1)) {
+      coinAcquisitions.push({
+        amount: parseFloat(allData[i][3]) || 0,
+        price: parseFloat(rowType === 'Аирдроп' ? 0 : allData[i][4]) || 0
+      });
+    }
+  }
+
+  let avgBuy = 0;
+  let pnl = 0;
+
+  if (txType === 'Продажа' && coinAcquisitions.length > 0) {
+    const totalAmount = coinAcquisitions.reduce((s, b) => s + b.amount, 0);
+    const totalCost = coinAcquisitions.reduce((s, b) => s + (b.amount * b.price), 0);
+    if (totalAmount > 0) {
+      avgBuy = totalCost / totalAmount;
+      pnl = (price - avgBuy) * amount - fee;
+    }
+  }
+
+  sheet.getRange(rowIndex + 1, 1, 1, 11).setValues([[
+    targetId,
+    txType,
+    coinFormatted,
+    amount,
+    price,
+    total,
+    fee,
+    data.date,
+    pnl,
+    avgBuy,
+    data.note || (isAirdrop ? 'Аирдроп' : (isScam ? 'Скам' : ''))
+  ]]);
+
+  sheet.getRange(rowIndex + 1, 1).setNumberFormat('@');
+  sheet.getRange(rowIndex + 1, 8).setNumberFormat('yyyy-mm-dd');
+
+  ensureCoinsTracked([coinFormatted]);
+  if (isNumericId(coinFormatted)) {
+    addUserAsset(coinFormatted);
+  } else if (isTickerAsset(coinFormatted)) {
+    addUserAsset(coinFormatted);
+  }
+
+  return { success: true };
+}
+
+/**
  * Реализация подсистемы CoinMarketCap API & кэширования (не чаще 1 раза в 4 часа)
  */
 function getLastPriceFetchTime() {

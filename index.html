@@ -1751,10 +1751,15 @@
             text-align: right;
         }
 
-        html.mobile-layout .responsive-table .btn-danger {
+        html.mobile-layout .responsive-table .btn-danger,
+        html.mobile-layout .responsive-table .mob-actions .btn-outline {
             min-height: 40px;
             min-width: 40px;
             padding: 8px 14px;
+        }
+
+        .responsive-table .mob-actions .btn-outline {
+            margin-right: 6px;
         }
 
         html.mobile-layout body.modal-open .mobile-bottom-nav,
@@ -2298,7 +2303,7 @@
                                 </div>
                                 <div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
                                     <label class="form-label">График TradingView — другая биржа</label>
-                                    <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Если монеты нет на Binance, укажите символ с нужной биржи. Формат: <strong style="color:var(--cyan)">MEXC:TOKENUSDT</strong>, <strong style="color:var(--cyan)">GATEIO:TOKEN_USDT</strong>, <strong style="color:var(--cyan)">OKX:TOKENUSDT</strong></p>
+                                    <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Если монеты нет на Binance, укажите символ с нужной биржи. Формат: <strong style="color:var(--cyan)">MEXC:TOKENUSDT</strong>, <strong style="color:var(--cyan)">GATEIO:TOKENUSDT</strong>, <strong style="color:var(--cyan)">OKX:TOKENUSDT</strong> — без подчёркивания. Если авто-символ всё равно не находится, проверьте точный вариант кнопкой ниже и впишите его в «Полный символ».</p>
                                     <div class="form-row">
                                         <div class="form-group">
                                             <label class="form-label" style="font-size:10px;">Тикер / UCID</label>
@@ -2321,9 +2326,12 @@
                                     </div>
                                     <div class="form-group" style="margin-top:8px;">
                                         <label class="form-label" style="font-size:10px;">Полный символ (если «Свой символ» или нестандартная пара)</label>
-                                        <input type="text" id="tvOverrideSymbol" class="form-input" placeholder="MEXC:5IREUSDT или GATEIO:LOOKS_USDT">
+                                        <input type="text" id="tvOverrideSymbol" class="form-input" placeholder="MEXC:5IREUSDT или GATEIO:LOOKSUSDT">
                                     </div>
-                                    <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="saveTvSymbolOverride()">Сохранить для графика</button>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="saveTvSymbolOverride()">Сохранить для графика</button>
+                                        <button type="button" class="btn btn-outline btn-sm" onclick="openTvSymbolSearch()">🔍 Найти точный символ на TradingView</button>
+                                    </div>
                                     <div id="tvOverrideList" class="tv-override-list"></div>
                                 </div>
                             </div>
@@ -2368,7 +2376,7 @@
     <div class="modal-overlay" id="modal">
         <div class="modal">
             <div class="modal-header">
-                <div class="modal-title">Новая сделка</div>
+                <div class="modal-title" id="modalFormTitle">Новая сделка</div>
                 <button class="modal-close" onclick="closeModal()">×</button>
             </div>
             <div class="modal-body">
@@ -2403,11 +2411,11 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">Тикер</label>
-                                <input type="text" class="form-input" id="mScamCoin" placeholder="ALT, LTMUB..." autocomplete="off">
+                                <input type="text" class="form-input" id="mScamCoin" placeholder="ALT, LTMUB..." autocomplete="off" oninput="updateTradePreview()">
                             </div>
                             <div class="form-group">
                                 <label class="form-label">Вложено ($)</label>
-                                <input type="number" class="form-input" id="mScamTotal" step="any" min="0" placeholder="Сколько потеряли">
+                                <input type="number" class="form-input" id="mScamTotal" step="any" min="0" placeholder="Сколько потеряли" oninput="updateTradePreview()">
                             </div>
                         </div>
                         <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Монета появится в портфеле с ценой <strong>$0</strong>. Вложения учитываются в общей сумме.</p>
@@ -2435,20 +2443,24 @@
                     </div>
                     <div class="form-group hidden-panel" id="mAirdropField">
                         <label class="form-label">Количество монет</label>
-                        <input type="number" class="form-input" id="mAmount" step="any" placeholder="Сколько монет получили бесплатно">
+                        <input type="number" class="form-input" id="mAmount" step="any" placeholder="Сколько монет получили бесплатно" oninput="updateTradePreview()">
                         <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Цена входа = $0. Монеты добавятся в портфель без затрат.</p>
                     </div>
                     <div class="form-row" id="mMetaFields">
                         <div class="form-group" id="mFeeField">
                             <label class="form-label">Комиссия ($)</label>
-                            <input type="number" class="form-input" id="mFee" value="0" step="any">
+                            <input type="number" class="form-input" id="mFee" value="0" step="any" oninput="updateTradePreview()">
                         </div>
                         <div class="form-group">
                             <label class="form-label">Примечание</label>
                             <input type="text" class="form-input" id="mNote" placeholder="Необязательно">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary btn-full">Сохранить сделку</button>
+                    <div class="form-group" id="tradePreviewWrap" style="display:none;">
+                        <label class="form-label" style="color:var(--cyan);">Предпросмотр после сделки</label>
+                        <div class="chart-sim-result" id="tradePreviewResult"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full" id="modalSubmitBtn">Сохранить сделку</button>
                 </form>
             </div>
         </div>
@@ -2538,6 +2550,8 @@
         let trackedCoins = [];
         let userAssets = [];
         let selectedCoin = '';
+        let editingTransactionId = null;
+        let forceNoCoinSelected = false;
         let selectedChartCoin = null;
         let portfolioTvWidget = null;
         let lastPortfolioChartCoinsKey = '';
@@ -2833,11 +2847,115 @@
         }
 
         function selectPickerCoin(coin) {
+            forceNoCoinSelected = false;
             selectedCoin = String(coin || '').toUpperCase().trim();
             document.getElementById('mCoin').value = selectedCoin;
             document.querySelectorAll('#mCoinPicker .coin-picker-item').forEach(function(item) {
                 item.classList.toggle('active', item.getAttribute('data-coin') === selectedCoin);
             });
+            updateTradePreview();
+        }
+
+        /**
+         * Живой предпросмотр в модалке "Новая/Редактировать сделку" — как изменится
+         * позиция (точка входа, P&L, безубыток, аллокация) после сохранения текущей
+         * сделки. Использует те же формулы, что и "Моделирование докупки" в графике.
+         */
+        function updateTradePreview() {
+            var wrap = document.getElementById('tradePreviewWrap');
+            var resultEl = document.getElementById('tradePreviewResult');
+            if (!wrap || !resultEl) return;
+
+            function hide() { wrap.style.display = 'none'; }
+
+            // При редактировании текущий "холдинг" уже включает старую версию этой
+            // же сделки — честный расчёт потребовал бы пересчитать позицию без неё
+            // (как делает бэкенд), это отдельная задача. Пока просто не показываем
+            // предпросмотр в режиме редактирования, чтобы не вводить в заблуждение.
+            if (editingTransactionId) { hide(); return; }
+
+            var type = document.getElementById('mType').value;
+            var coin = getSelectedCoin();
+            if (!coin) { hide(); return; }
+
+            if (type === 'Скам') {
+                var scamTotal = parseFloat(document.getElementById('mScamTotal').value);
+                if (isNaN(scamTotal) || scamTotal <= 0) { hide(); return; }
+                wrap.style.display = 'block';
+                resultEl.innerHTML = '<div class="sim-row"><span>Итог</span><strong>Позиция «' + coin + '» спишется в портфель с потерей ' + formatMoney(scamTotal) + '</strong></div>';
+                return;
+            }
+
+            var snap = getChartCoinSnapshot(coin);
+            var h = snap ? snap.h : null;
+            var hasExisting = !!(h && h.amount > 0 && !h.isRecovered);
+            var existingAmount = h ? h.amount : 0;
+            var existingCostBasis = h ? h.costBasis : 0;
+            var existingAvgBuy = hasExisting ? h.avgBuy : 0;
+            var currentPrice = snap ? snap.currentPrice : getCurrentPrice(coin);
+            var totalPortfolioCost = snap ? snap.totalPortfolioCost : getTotalPortfolioCostBasis(globalHoldings);
+
+            var newAmount, newCostBasis, newTotalPortfolioCost, extraRows = '';
+
+            if (type === 'Аирдроп') {
+                var airdropAmount = parseFloat(document.getElementById('mAmount').value);
+                if (isNaN(airdropAmount) || airdropAmount <= 0) { hide(); return; }
+                newAmount = existingAmount + airdropAmount;
+                newCostBasis = existingCostBasis;
+                newTotalPortfolioCost = totalPortfolioCost;
+            } else {
+                var useAmountMode = getTradeInputMode() === 'amount';
+                var totalMoney = parseFloat(document.getElementById('mTotal').value);
+                var tradeAmount, tradePrice;
+
+                if (useAmountMode) {
+                    tradeAmount = parseFloat(document.getElementById('mTradeAmount').value);
+                    if (isNaN(totalMoney) || totalMoney <= 0 || isNaN(tradeAmount) || tradeAmount <= 0) { hide(); return; }
+                    tradePrice = totalMoney / tradeAmount;
+                } else {
+                    tradePrice = parseFloat(document.getElementById('mPrice').value);
+                    if (isNaN(totalMoney) || isNaN(tradePrice) || tradePrice <= 0 || totalMoney <= 0) { hide(); return; }
+                    tradeAmount = totalMoney / tradePrice;
+                }
+
+                if (type === 'Продажа') {
+                    var fee = parseFloat(document.getElementById('mFee').value) || 0;
+                    var realizedPnl = existingAvgBuy > 0 ? (tradePrice - existingAvgBuy) * tradeAmount - fee : null;
+                    newAmount = existingAmount - tradeAmount;
+                    newCostBasis = existingAvgBuy > 0 ? Math.max(0, existingCostBasis - existingAvgBuy * tradeAmount) : Math.max(0, existingCostBasis - totalMoney);
+                    newTotalPortfolioCost = Math.max(0, totalPortfolioCost - (existingCostBasis - newCostBasis));
+                    extraRows += '<div class="sim-row"><span>Реализованный P&L по сделке</span><strong>' +
+                        (realizedPnl === null ? '—' : (realizedPnl >= 0 ? '+' : '') + formatMoney(realizedPnl)) + '</strong></div>';
+                } else {
+                    newAmount = existingAmount + tradeAmount;
+                    newCostBasis = existingCostBasis + totalMoney;
+                    newTotalPortfolioCost = totalPortfolioCost + totalMoney;
+                }
+            }
+
+            var newAvgBuy = newAmount > 0.000001 ? newCostBasis / newAmount : 0;
+            var refPrice = (currentPrice !== null && currentPrice > 0) ? currentPrice : (existingAvgBuy || newAvgBuy || 0);
+            var oldPnl = (existingAvgBuy > 0 && refPrice > 0) ? calcPnlPct(refPrice, existingAvgBuy) : null;
+            var newPnl = (newAvgBuy > 0 && refPrice > 0) ? calcPnlPct(refPrice, newAvgBuy) : null;
+            var oldBe = (existingAvgBuy > 0 && refPrice > 0) ? calcBreakevenPct(refPrice, existingAvgBuy) : null;
+            var newBe = (newAvgBuy > 0 && refPrice > 0) ? calcBreakevenPct(refPrice, newAvgBuy) : null;
+            var oldAllocPct = totalPortfolioCost > 0 ? (existingCostBasis / totalPortfolioCost * 100) : null;
+            var newAllocPct = newTotalPortfolioCost > 0 ? (newCostBasis / newTotalPortfolioCost * 100) : null;
+
+            var html = '<div class="sim-row"><span>' + (hasExisting ? 'Было → станет (вход)' : 'Точка входа') + '</span><strong>' +
+                (hasExisting ? formatPrice(existingAvgBuy) + ' → ' : '') + (newAvgBuy > 0 ? formatPrice(newAvgBuy) : '—') + '</strong></div>';
+            html += extraRows;
+            html += '<div class="sim-row"><span>P&L при текущей цене</span><strong>' +
+                (oldPnl !== null ? formatSignedPct(oldPnl) + ' → ' : '') + (newPnl !== null ? formatSignedPct(newPnl) : '—') + '</strong></div>';
+            html += '<div class="sim-row"><span>До безубытка</span><strong>' +
+                (oldBe !== null ? (oldBe === 0 ? '0%' : '+' + oldBe.toFixed(2) + '%') + ' → ' : '') +
+                (newBe === null ? '—' : (newBe === 0 ? '0%' : '+' + newBe.toFixed(2) + '%')) + '</strong></div>';
+            html += '<div class="sim-row"><span>Монет после сделки</span><strong>' + formatNumber(Math.max(0, newAmount), 4) + '</strong></div>';
+            html += '<div class="sim-row"><span>Аллокация в портфеле</span><strong>' +
+                (oldAllocPct !== null ? oldAllocPct.toFixed(1) + '% → ' : '') + (newAllocPct === null ? '—' : newAllocPct.toFixed(1) + '%') + '</strong></div>';
+
+            wrap.style.display = 'block';
+            resultEl.innerHTML = html;
         }
 
         function filterCoinPicker() {
@@ -2875,12 +2993,17 @@
                     '</button>';
                 });
 
-                var preferred = '';
-                if (selectedCoin && coins.indexOf(selectedCoin) !== -1) preferred = selectedCoin;
-                else if (lastUsedCoin && coins.indexOf(lastUsedCoin) !== -1) preferred = lastUsedCoin;
-                else preferred = coins[0];
+                if (forceNoCoinSelected) {
+                    selectedCoin = '';
+                    document.getElementById('mCoin').value = '';
+                } else {
+                    var preferred = '';
+                    if (selectedCoin && coins.indexOf(selectedCoin) !== -1) preferred = selectedCoin;
+                    else if (lastUsedCoin && coins.indexOf(lastUsedCoin) !== -1) preferred = lastUsedCoin;
+                    else preferred = coins[0];
 
-                selectPickerCoin(preferred);
+                    selectPickerCoin(preferred);
+                }
             }
 
             picker.innerHTML = html;
@@ -2939,7 +3062,7 @@
             'DYDX': 'BINANCE:DYDXUSDT', 'SWEAT': 'BINANCE:SWEATUSDT', 'ALI': 'BINANCE:ALIUSDT',
             'AEVO': 'BINANCE:AEVOUSDT', 'CFG': 'BINANCE:CFGUSDT', 'PI': 'BINANCE:PIUSDT',
             'LOOKS': 'OKX:LOOKSUSDT', '5IRE': 'MEXC:5IREUSDT', 'KISHU': 'MEXC:KISHUUSDT',
-            'AIDOGE': 'MEXC:AIDOGEUSDT', 'SIS': 'GATEIO:SIS_USDT', 'LOOP': 'GATEIO:LOOP_USDT'
+            'AIDOGE': 'MEXC:AIDOGEUSDT', 'SIS': 'GATEIO:SISUSDT', 'LOOP': 'GATEIO:LOOPUSDT'
         };
 
         /* Биржа по умолчанию, если монеты нет в TV_SYMBOL_MAP и нет своей настройки */
@@ -2966,10 +3089,30 @@
             var t = String(ticker || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
             var ex = String(exchange || 'MEXC').toUpperCase();
             if (!t) return null;
-            if (ex === 'GATEIO') return 'GATEIO:' + t + '_USDT';
-            if (ex === 'OKX') return 'OKX:' + t + 'USDT';
+            // Важно: формат пары у TradingView не всегда совпадает с "родным" форматом биржи.
+            // Например, у самого Gate.io пары идут с подчёркиванием (BTC_USDT), но у TradingView
+            // символы Gate.io пишутся БЕЗ подчёркивания (GATEIO:BTCUSDT) — как у большинства
+            // остальных бирж, поэтому подчёркивание тут нигде не используется.
             if (ex === 'KUCOIN') return 'KUCOIN:' + t + '-USDT';
             return ex + ':' + t + 'USDT';
+        }
+
+        function openTvSymbolSearch() {
+            var coinRaw = document.getElementById('tvOverrideCoin').value.trim();
+            if (!coinRaw) {
+                showToast('Сначала укажите тикер или UCID монеты', 'error');
+                return;
+            }
+            var coinKey = normalizeCoinKey(coinRaw);
+            var ticker = getCoinSymbol(coinKey) || (isNumericId(coinKey) ? '' : coinKey) || coinRaw;
+            ticker = String(ticker || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!ticker) {
+                showToast('Не удалось определить тикер монеты', 'error');
+                return;
+            }
+            // Открываем обзорную страницу монеты на TradingView — на вкладке "Markets" видно
+            // точный формат символа для каждой конкретной биржи (с подчёркиванием или без).
+            window.open('https://www.tradingview.com/symbols/' + ticker + 'USD/', '_blank', 'noopener');
         }
 
         function saveTvSymbolOverride() {
@@ -3429,17 +3572,84 @@
             return 'BINANCE:' + sym + 'USDT';
         }
 
+        function setModalEditUi(isEditing) {
+            var title = document.getElementById('modalFormTitle');
+            var btn = document.getElementById('modalSubmitBtn');
+            if (title) title.textContent = isEditing ? 'Редактировать сделку' : 'Новая сделка';
+            if (btn) btn.textContent = isEditing ? 'Сохранить изменения' : 'Сохранить сделку';
+        }
+
         function openModal(presetCoin) {
-            if (presetCoin) {
-                selectedCoin = String(presetCoin).toUpperCase().trim();
-                lastUsedCoin = selectedCoin;
-            }
+            editingTransactionId = null;
+            setModalEditUi(false);
             document.getElementById('modal').classList.add('active');
             document.body.classList.add('modal-open');
             mDateTouched = false;
             document.getElementById('mDate').value = todayIso();
+            document.getElementById('mFee').value = '0';
+            document.getElementById('mNote').value = '';
             document.getElementById('mCoinSearch').value = '';
+            // Сбрасываем сумму/количество/цену — иначе в полях остаются значения,
+            // введённые в прошлый раз для другой монеты.
+            document.getElementById('mTotal').value = '';
+            document.getElementById('mTradeAmount').value = '';
+            document.getElementById('mTradeHint').textContent = '';
+            document.getElementById('mPrice').value = '';
+
+            if (presetCoin) {
+                forceNoCoinSelected = false;
+                selectedCoin = String(presetCoin).toUpperCase().trim();
+                lastUsedCoin = selectedCoin;
+                // "+" на конкретной позиции — сразу подставляем её текущую рыночную
+                // цену, а не то, что было введено в форме в прошлый раз.
+                var currentPrice = getCurrentPrice(selectedCoin);
+                if (currentPrice !== null && currentPrice > 0) {
+                    document.getElementById('mPrice').value = priceInputValue(currentPrice);
+                }
+            } else {
+                // Кнопка "+ Новая сделка" без привязки к монете — форма должна быть
+                // полностью пустой, никакая монета не должна подставляться сама.
+                forceNoCoinSelected = true;
+                selectedCoin = '';
+            }
+
             updateTransactionFormFields();
+        }
+
+        function startEditTransaction(id) {
+            var tx = transactions.filter(function(t) { return String(t.id) === String(id); })[0];
+            if (!tx) { showToast('Сделка не найдена', 'error'); return; }
+
+            editingTransactionId = tx.id;
+            forceNoCoinSelected = false;
+            selectedCoin = normalizeCoinKey(tx.coin) || String(tx.coin || '').toUpperCase().trim();
+            lastUsedCoin = selectedCoin;
+
+            document.getElementById('modal').classList.add('active');
+            document.body.classList.add('modal-open');
+            setModalEditUi(true);
+
+            mDateTouched = true;
+            document.getElementById('mDate').value = String(tx.date || '').substring(0, 10) || todayIso();
+            document.getElementById('mType').value = tx.type;
+            document.getElementById('mFee').value = tx.fee || 0;
+            document.getElementById('mNote').value = tx.note || '';
+            document.getElementById('mCoinSearch').value = '';
+
+            updateTransactionFormFields();
+
+            if (tx.type === 'Скам') {
+                document.getElementById('mScamCoin').value = selectedCoin;
+                document.getElementById('mScamTotal').value = tx.total || tx.price || '';
+            } else if (tx.type === 'Аирдроп') {
+                document.getElementById('mAmount').value = tx.amount || '';
+            } else {
+                setTradeInputMode('price');
+                document.getElementById('mTotal').value = tx.total || '';
+                document.getElementById('mPrice').value = tx.price || '';
+                updateTradeHint();
+            }
+            updateTradePreview();
         }
 
         function openModalScam(coin) {
@@ -3483,6 +3693,7 @@
                     hint.textContent = 'Укажите сумму и цену за монету';
                 }
             }
+            updateTradePreview();
         }
 
         function updateTransactionFormFields() {
@@ -3501,11 +3712,14 @@
                 setTradeInputMode(getTradeInputMode());
             }
             if (!isScam) renderCoinPicker();
+            updateTradePreview();
         }
 
         function closeModal() {
             document.getElementById('modal').classList.remove('active');
             document.body.classList.remove('modal-open');
+            editingTransactionId = null;
+            setModalEditUi(false);
         }
 
         function showToast(message, type) {
@@ -3873,6 +4087,8 @@
             var prefix = isModal ? 'm' : 'q';
             var type = document.getElementById(prefix + 'Type').value;
             var coin = isModal ? getSelectedCoin() : document.getElementById(prefix + 'Coin').value.toUpperCase().trim();
+            var isEditing = isModal && !!editingTransactionId;
+            var txId = isEditing ? editingTransactionId : String(Date.now());
             var tx;
 
             if (type === 'Скам') {
@@ -3886,7 +4102,7 @@
                     showToast('Укажите сумму вложений ($)', 'error'); return;
                 }
                 tx = {
-                    id: String(Date.now()), type: type, coin: coin,
+                    id: txId, type: type, coin: coin,
                     amount: 1, price: scamTotal, total: scamTotal,
                     date: document.getElementById(prefix + 'Date').value,
                     fee: 0,
@@ -3899,7 +4115,7 @@
                     showToast('Укажите количество монет из аирдропа', 'error'); return;
                 }
                 tx = {
-                    id: String(Date.now()), type: type, coin: coin,
+                    id: txId, type: type, coin: coin,
                     amount: airdropAmount, price: 0, total: 0,
                     date: document.getElementById(prefix + 'Date').value,
                     fee: 0,
@@ -3925,7 +4141,10 @@
                 }
 
                 if (!coin) { showToast('Выберите монету', 'error'); return; }
-                if (type === 'Продажа') {
+                if (type === 'Продажа' && !isEditing) {
+                    // При редактировании баланс проверяет сервер (исключая саму
+                    // редактируемую строку из расчёта) — здесь клиентская проверка
+                    // ложно сработала бы, если сумма/количество продажи не менялись.
                     var available = globalHoldings[coin] ? globalHoldings[coin].amount : 0;
                     if (available <= 0) { showToast('Монеты ' + coin + ' нет в портфеле', 'error'); return; }
                     if (available < computedAmount - 0.000001) {
@@ -3934,7 +4153,7 @@
                 }
 
                 tx = {
-                    id: String(Date.now()), type: type, coin: coin,
+                    id: txId, type: type, coin: coin,
                     amount: computedAmount, price: assetPrice, total: totalMoney,
                     date: document.getElementById(prefix + 'Date').value,
                     fee: parseFloat(document.getElementById(prefix + 'Fee').value) || 0,
@@ -3942,8 +4161,8 @@
                 };
             }
 
-            showLoading(true, 'Сохранение...');
-            google.script.run
+            showLoading(true, isEditing ? 'Сохранение изменений...' : 'Сохранение...');
+            var runner = google.script.run
                 .withSuccessHandler(function(result) {
                     showLoading(false);
                     if (result && result.success) {
@@ -3964,13 +4183,17 @@
                             updateTransactionFormFields();
                             closeModal();
                         }
-                        var toastMsg = type === 'Аирдроп' ? 'Аирдроп добавлен!' : (type === 'Скам' ? 'Скам добавлен!' : 'Сделка сохранена!');
+                        var toastMsg = isEditing
+                            ? 'Сделка обновлена!'
+                            : (type === 'Аирдроп' ? 'Аирдроп добавлен!' : (type === 'Скам' ? 'Скам добавлен!' : 'Сделка сохранена!'));
                         showToast(toastMsg);
                         refreshData();
                     } else { showToast('Ошибка: ' + result.error, 'error'); }
                 })
-                .withFailureHandler(function() { showLoading(false); showToast('Ошибка сохранения', 'error'); })
-                .addTransaction(tx);
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка сохранения', 'error'); });
+
+            if (isEditing) runner.updateTransaction(tx);
+            else runner.addTransaction(tx);
         }
 
         function deleteTransaction(id) {
@@ -4577,7 +4800,8 @@
                     '<td data-label="Сумма" class="mono">' + totalText + '</td>' +
                     '<td data-label="Дата" style="color:var(--text-secondary)">' + new Date(tx.date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', year: 'numeric' }) + '</td>' +
                     '<td data-label="P&L" class="' + pnlClass + ' mono">' + pnlText + '</td>' +
-                    '<td data-label="" class="mob-actions"><button class="btn btn-danger" onclick="deleteTransaction(\'' + tx.id + '\')">✕</button></td>' +
+                    '<td data-label="" class="mob-actions"><button class="btn btn-outline" title="Редактировать" onclick="startEditTransaction(\'' + tx.id + '\')">✎</button> ' +
+                    '<button class="btn btn-danger" title="Удалить" onclick="deleteTransaction(\'' + tx.id + '\')">✕</button></td>' +
                 '</tr>';
             });
             tbody.innerHTML = html;
