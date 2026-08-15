@@ -1,0 +1,4331 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <script>
+        (function(d, w, n) {
+            var ua = n.userAgent || '';
+            var touch = ('ontouchstart' in w) || (n.maxTouchPoints > 0);
+            var narrow = w.innerWidth <= 900;
+            var mobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua);
+            if (narrow || mobileUa || (touch && w.innerWidth < 1100)) {
+                d.documentElement.classList.add('mobile-layout');
+            }
+            if (w.innerWidth <= 380) d.documentElement.classList.add('narrow');
+        })(document, window, navigator);
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>Vault — Крипто Портфель</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://s3.tradingview.com/tv.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --bg-elevated: #111111;
+            --bg-card: #161616;
+            --bg-card-hover: #1c1c1c;
+            --bg-input: #1f1f1f;
+            --border: rgba(255,255,255,0.06);
+            --border-light: rgba(255,255,255,0.1);
+            --text: #ffffff;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --cyan: #2dd4bf;
+            --cyan-glow: rgba(45, 212, 191, 0.35);
+            --blue: #38bdf8;
+            --blue-glow: rgba(56, 189, 248, 0.25);
+            --green: #4ade80;
+            --green-dim: rgba(74, 222, 128, 0.12);
+            --red: #f87171;
+            --red-dim: rgba(248, 113, 113, 0.12);
+            --orange: #fb923c;
+            --purple: #a78bfa;
+            --pink: #f472b6;
+            --radius: 20px;
+            --radius-md: 14px;
+            --radius-sm: 10px;
+            --radius-pill: 999px;
+            --sidebar-w: 72px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .app {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ── Sidebar ── */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--bg-elevated);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            position: fixed;
+            top: 0; left: 0; bottom: 0;
+            z-index: 100;
+        }
+
+        .sidebar-logo {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--cyan), var(--blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            color: #000;
+            margin-bottom: 32px;
+            box-shadow: 0 0 24px var(--cyan-glow);
+        }
+
+        .nav-items {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .nav-btn {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.25s;
+        }
+
+        .nav-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+        .nav-btn.active {
+            background: rgba(56, 189, 248, 0.12);
+            color: var(--blue);
+            box-shadow: 0 0 20px var(--blue-glow);
+        }
+
+        .nav-bottom {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: auto;
+        }
+
+        /* ── Main ── */
+        .main {
+            flex: 1;
+            margin-left: var(--sidebar-w);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 32px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(10,10,10,0.8);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .breadcrumb {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .breadcrumb span { color: var(--text); font-weight: 500; }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .search-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-pill);
+            padding: 10px 18px;
+            min-width: 220px;
+        }
+
+        .search-box input {
+            background: none;
+            border: none;
+            outline: none;
+            color: var(--text);
+            font-size: 13px;
+            width: 100%;
+            font-family: inherit;
+        }
+
+        .search-box input::placeholder { color: var(--text-muted); }
+
+        .icon-btn {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover { border-color: var(--border-light); color: var(--text); }
+
+        .avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple), var(--blue));
+            border: 2px solid var(--border-light);
+        }
+
+        .page-content {
+            padding: 24px 32px 40px;
+            flex: 1;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            padding: 10px 18px;
+            border-radius: var(--radius-pill);
+            border: none;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--cyan), #14b8a6);
+            color: #042f2e;
+            box-shadow: 0 4px 20px var(--cyan-glow);
+        }
+
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 28px var(--cyan-glow); }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-light);
+        }
+
+        .btn-outline:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+
+        .btn-ghost {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover { border-color: var(--border-light); }
+
+        .btn-danger {
+            background: var(--red-dim);
+            color: var(--red);
+            border: 1px solid rgba(248,113,113,0.2);
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-sm { padding: 8px 14px; font-size: 12px; }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .card-header {
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .card-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        .card-body { padding: 0 24px 24px; }
+        .card-body-pad { padding: 24px; }
+
+        /* ── Layout grid ── */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 20px;
+            align-items: start;
+        }
+
+        @media (max-width: 1100px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Portfolio hero ── */
+        .portfolio-hero .card-body { padding-bottom: 8px; }
+
+        .portfolio-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 42px;
+            font-weight: 600;
+            letter-spacing: -2px;
+            margin: 8px 0 4px;
+            line-height: 1;
+        }
+
+        .portfolio-change {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .portfolio-invested {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .portfolio-invested strong {
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .tab {
+            padding: 6px 14px;
+            border-radius: var(--radius-pill);
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .tab.active {
+            background: rgba(255,255,255,0.08);
+            color: var(--text);
+        }
+
+        .tab:hover:not(.active) { color: var(--text-secondary); }
+
+        .timeframes {
+            display: flex;
+            gap: 4px;
+        }
+
+        .tf-btn {
+            padding: 6px 12px;
+            border-radius: var(--radius-pill);
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+
+        .tf-btn.active {
+            background: rgba(56, 189, 248, 0.12);
+            color: var(--blue);
+            border-color: rgba(56, 189, 248, 0.2);
+        }
+
+        .chart-area {
+            height: 220px;
+            margin-top: 8px;
+            position: relative;
+        }
+
+        .portfolio-chart-section {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .portfolio-chart-label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .invest-chart-wrap {
+            width: 100%;
+            height: 280px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            padding: 12px 8px 8px;
+            position: relative;
+        }
+
+        .portfolio-chart-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .portfolio-chart-footer .chart-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .portfolio-chart-footer a {
+            font-size: 12px;
+            color: var(--cyan);
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .portfolio-chart-footer a:hover { text-decoration: underline; }
+
+        .tv-override-list {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tv-override-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+            font-size: 12px;
+        }
+
+        .tv-override-item .sym {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--cyan);
+            font-size: 11px;
+        }
+
+        .tv-override-item button {
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 6px;
+        }
+
+        .tv-override-item button:hover { color: var(--red); }
+
+        .mini-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .mini-stat {
+            padding: 14px;
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border);
+        }
+
+        .mini-stat .label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .mini-stat .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        /* ── Positions table ── */
+        .table-wrap { overflow-x: auto; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+        th {
+            text-align: left;
+            padding: 12px 16px;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        tr:last-child td { border-bottom: none; }
+
+        .coin-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            justify-content: space-between;
+        }
+
+        .coin-cell-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .coin-cell-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+            cursor: pointer;
+        }
+
+        .coin-cell-main:hover .coin-name { color: var(--cyan); }
+
+        .coin-action-btn {
+            flex-shrink: 0;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .coin-action-btn:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: rgba(45, 212, 191, 0.08);
+        }
+
+        .coin-action-btn.chart-btn { font-size: 14px; }
+
+        .coin-avatar {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--cyan), var(--blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: #000;
+            flex-shrink: 0;
+        }
+
+        .coin-name { font-weight: 600; font-size: 14px; }
+        .coin-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .pnl-up { color: var(--green); }
+        .pnl-down { color: var(--red); }
+
+        .spark {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        .spark.up { background: var(--green-dim); color: var(--green); }
+        .spark.down { background: var(--red-dim); color: var(--red); }
+
+        .pnl-cell {
+            min-width: 110px;
+            line-height: 1.35;
+        }
+
+        .pnl-cell-amount {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
+        .pnl-cell-pct {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 5px 10px;
+            border-radius: 8px;
+        }
+
+        .pnl-cell-pct.up { background: var(--green-dim); color: var(--green); }
+        .pnl-cell-pct.down { background: var(--red-dim); color: var(--red); }
+
+        .pnl-cell-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .pnl-cell-sub.realized {
+            color: var(--green);
+            font-weight: 600;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: var(--radius-pill);
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .badge-buy { background: var(--green-dim); color: var(--green); }
+        .badge-sell { background: var(--red-dim); color: var(--red); }
+        .badge-airdrop { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+        .badge-scam { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+        .price-live-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: rgba(45, 212, 191, 0.12);
+            color: var(--cyan);
+            font-size: 10px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        .price-manual-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: rgba(251, 146, 60, 0.12);
+            color: var(--orange);
+            font-size: 10px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        .price-dead-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: rgba(248, 113, 113, 0.12);
+            color: var(--red);
+            font-size: 10px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        .recovered-tag {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: rgba(74, 222, 128, 0.12);
+            color: var(--green);
+            font-size: 10px;
+            font-weight: 600;
+            vertical-align: middle;
+        }
+
+        /* ── Right column widgets ── */
+        .allocation-card .card-body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px 24px 24px;
+        }
+
+        .donut-wrap {
+            position: relative;
+            width: 200px;
+            height: 200px;
+        }
+
+        .donut-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        .donut-center .lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .donut-center .val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+
+        .legend {
+            width: 100%;
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .legend-left { display: flex; align-items: center; gap: 8px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        /* ── Promo / AI cards ── */
+        .promo-card {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16162a 100%);
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .promo-card::before {
+            content: '';
+            position: absolute;
+            top: -50%; right: -30%;
+            width: 200px; height: 200px;
+            background: radial-gradient(circle, var(--blue-glow), transparent 70%);
+            pointer-events: none;
+        }
+
+        .promo-icon {
+            width: 48px; height: 48px;
+            border-radius: 14px;
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+
+        .promo-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .promo-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+        .premium-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: linear-gradient(135deg, var(--purple), var(--blue));
+            color: white;
+            margin-bottom: 10px;
+        }
+
+        .risk-widget { padding: 0 24px 24px; }
+
+        .risk-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 12px 0 8px;
+        }
+
+        .risk-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, var(--green), var(--orange), var(--red));
+            transition: width 0.6s ease;
+        }
+
+        .risk-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .risk-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .risk-stat {
+            text-align: center;
+            padding: 12px 8px;
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+
+        .risk-stat .v {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--cyan);
+        }
+
+        .risk-stat .l {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .perf-chart { height: 140px; padding: 0 16px 16px; }
+
+        /* ── Forms ── */
+        .form-group { margin-bottom: 14px; }
+
+        .form-label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+        }
+
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .btn-full { width: 100%; justify-content: center; }
+
+        .sync-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .portfolio-sync-row {
+            margin: 12px 0 16px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .portfolio-hero-header {
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .portfolio-hero-intro {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .portfolio-sync-header {
+            margin: 10px 0 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        .portfolio-sync-header .last-sync-label {
+            max-width: none;
+        }
+
+        .sync-inline {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .last-sync-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.4;
+            max-width: 220px;
+        }
+
+        .last-sync-label strong {
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .auto-sync-ok {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .auto-sync-warn {
+            color: #e6a817;
+            font-size: 12px;
+        }
+
+        .auto-sync-error {
+            color: var(--danger, #e74c3c);
+            font-size: 12px;
+        }
+
+        .auto-sync-info {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .portfolio-sync-row .last-sync-label {
+            max-width: none;
+        }
+
+        .trade-mode-toggle {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 12px;
+            padding: 4px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+        }
+
+        .trade-mode-btn {
+            flex: 1;
+            padding: 8px 10px;
+            border: none;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .trade-mode-btn.active {
+            background: var(--bg-card);
+            color: var(--cyan);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .trade-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: -4px 0 0;
+            min-height: 16px;
+        }
+
+        .trade-hint strong { color: var(--text-secondary); }
+
+        .hidden-panel { display: none; }
+
+        .coin-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .coin-chip {
+            padding: 5px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .coin-chip:hover,
+        .coin-chip.active {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: rgba(45, 212, 191, 0.08);
+        }
+
+        .coin-picker-wrap { margin-bottom: 4px; }
+
+        .coin-picker-search {
+            margin-bottom: 10px;
+        }
+
+        .coin-picker-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+            gap: 8px;
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 2px;
+        }
+
+        .coin-picker-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            min-height: 64px;
+            padding: 10px 8px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+
+        .coin-picker-item:hover {
+            border-color: rgba(45, 212, 191, 0.45);
+            background: rgba(45, 212, 191, 0.06);
+        }
+
+        .coin-picker-item.active {
+            border-color: var(--cyan);
+            background: rgba(45, 212, 191, 0.12);
+            box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.2);
+        }
+
+        .coin-picker-item .ticker {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .coin-picker-item .balance {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .coin-add-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .coin-picker-empty {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 18px 12px;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        /* ── Auth banner ── */
+        .auth-banner {
+            display: none;
+            background: rgba(251, 146, 60, 0.08);
+            border: 1px solid rgba(251, 146, 60, 0.25);
+            border-radius: var(--radius-md);
+            padding: 20px 24px;
+            margin-bottom: 20px;
+        }
+
+        .auth-banner.visible { display: block; }
+        .auth-banner h3 { font-size: 15px; color: var(--orange); margin-bottom: 8px; }
+        .auth-banner ol { margin: 10px 0 10px 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+        .auth-banner .auth-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        .auth-banner a.btn { text-decoration: none; }
+
+        .bg-sync-banner {
+            display: none;
+            background: rgba(230, 168, 23, 0.08);
+            border: 1px solid rgba(230, 168, 23, 0.35);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+        }
+        .bg-sync-banner.visible { display: block; }
+        .bg-sync-banner h3 { font-size: 15px; color: #e6a817; margin-bottom: 8px; }
+        .bg-sync-banner ol { margin: 10px 0 10px 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
+        .bg-sync-banner .auth-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+
+        .btn-link-inline {
+            background: none;
+            border: none;
+            padding: 0;
+            color: var(--accent, #6c8cff);
+            cursor: pointer;
+            font: inherit;
+            text-decoration: underline;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon { font-size: 40px; opacity: 0.4; margin-bottom: 12px; }
+        .empty-state h3 { font-size: 15px; color: var(--text-secondary); margin-bottom: 6px; }
+        .empty-state p { font-size: 13px; }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.75);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius);
+            width: 100%;
+            max-width: 560px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+        }
+
+        .modal-header {
+            padding: 22px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title { font-size: 18px; font-weight: 600; }
+
+        .modal-close {
+            width: 36px; height: 36px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .modal-close:hover { background: var(--red-dim); color: var(--red); border-color: transparent; }
+        .modal-body { padding: 24px; }
+
+        .modal-chart {
+            max-width: 1180px;
+            width: min(96vw, 1180px);
+            height: min(88vh, 760px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chart-modal-body {
+            flex: 1;
+            padding: 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-modal-layout {
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: stretch;
+        }
+
+        .chart-coin-panel {
+            width: 300px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.02);
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .chart-coin-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .chart-coin-stat .lbl {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .chart-coin-stat .val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary, #fff);
+        }
+
+        .chart-coin-stat .sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .chart-coin-stat .sub.positive { color: var(--green); }
+        .chart-coin-stat .sub.negative { color: var(--red); }
+        .chart-coin-stat .sub.neutral { color: var(--text-muted); }
+
+        .chart-coin-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 2px 0;
+        }
+
+        .chart-sim-section {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chart-sim-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .chart-sim-section .form-label {
+            font-size: 10px;
+            margin-bottom: 4px;
+        }
+
+        .chart-sim-section .form-input {
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .chart-sim-result {
+            padding: 10px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: rgba(45, 212, 191, 0.06);
+            font-size: 12px;
+            line-height: 1.55;
+            color: var(--text-secondary);
+        }
+
+        .chart-sim-result strong {
+            color: var(--text-primary, #fff);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        .chart-sim-result .sim-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .chart-sim-result .sim-row:first-child { margin-top: 0; }
+
+        .tv-chart-container {
+            flex: 1;
+            min-width: 0;
+            min-height: 420px;
+            background: var(--bg-elevated);
+        }
+
+        .chart-modal-footer {
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .chart-modal-footer .chart-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: 0;
+        }
+
+        .legend-item.clickable {
+            cursor: pointer;
+            border-radius: 8px;
+            padding: 4px 6px;
+            margin: -4px -6px;
+            transition: background 0.2s;
+        }
+
+        .legend-item.clickable:hover { background: rgba(255,255,255,0.04); }
+
+        /* ── Toast & Loading ── */
+        .toast {
+            position: fixed;
+            bottom: 24px; right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.35s;
+            z-index: 2000;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { border-left: 3px solid var(--green); }
+        .toast.error { border-left: 3px solid var(--red); }
+
+        .loading-overlay {
+            position: fixed; inset: 0;
+            background: rgba(10,10,10,0.9);
+            backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .loading-overlay.active { display: flex; }
+
+        .spinner {
+            width: 44px; height: 44px;
+            border: 3px solid var(--border);
+            border-top-color: var(--cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { color: var(--text-secondary); font-size: 14px; }
+
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+        /* ── Mobile utilities ── */
+        .mobile-only { display: none; }
+
+        .mobile-bottom-nav {
+            display: none;
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 200;
+            background: rgba(17, 17, 17, 0.96);
+            backdrop-filter: blur(16px);
+            border-top: 1px solid var(--border);
+            padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+            justify-content: space-around;
+            align-items: stretch;
+            gap: 4px;
+        }
+
+        .mob-nav-btn {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            min-height: 52px;
+            padding: 6px 4px;
+            border: none;
+            border-radius: 12px;
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-family: inherit;
+            -webkit-tap-highlight-color: transparent;
+            transition: color 0.2s, background 0.2s;
+        }
+
+        .mob-nav-btn.active {
+            color: var(--blue);
+            background: rgba(56, 189, 248, 0.1);
+        }
+
+        .mob-nav-icon {
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .mob-nav-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+        }
+
+        .mob-nav-add {
+            color: var(--cyan);
+        }
+
+        .mob-nav-add .mob-nav-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--cyan), #14b8a6);
+            color: #042f2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 700;
+            box-shadow: 0 4px 16px var(--cyan-glow);
+        }
+
+        .mobile-search-bar {
+            padding: 10px 16px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(10, 10, 10, 0.95);
+            position: sticky;
+            top: 57px;
+            z-index: 40;
+        }
+
+        .mobile-search-box {
+            min-width: 0;
+            width: 100%;
+            border-radius: var(--radius-sm);
+            padding: 12px 14px;
+        }
+
+        .mobile-search-box input {
+            font-size: 16px;
+        }
+
+        #home, #positions, #history, #settingsPanel {
+            scroll-margin-top: 68px;
+        }
+
+        html.mobile-layout .sidebar { display: none; }
+        html.mobile-layout .main { margin-left: 0; }
+        html.mobile-layout .mobile-only { display: block; }
+        html.mobile-layout .desktop-only { display: none !important; }
+        html.mobile-layout .mobile-bottom-nav { display: flex !important; }
+
+        html.mobile-layout .topbar {
+            padding: 12px 16px;
+            min-height: 57px;
+        }
+
+        html.mobile-layout .breadcrumb {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        html.mobile-layout .breadcrumb span { font-weight: 600; }
+
+        html.mobile-layout .topbar-right { gap: 8px; }
+
+        html.mobile-layout .topbar-right .btn-primary {
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        html.mobile-layout .page-content {
+            padding: 16px 16px calc(88px + env(safe-area-inset-bottom));
+        }
+
+        html.mobile-layout .card {
+            border-radius: var(--radius-md);
+            margin-bottom: 16px;
+        }
+
+        html.mobile-layout .card-header { padding: 16px; }
+
+        html.mobile-layout .card-body,
+        html.mobile-layout .card-body-pad {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+
+        html.mobile-layout .card-body { padding-bottom: 16px; }
+
+        html.mobile-layout .portfolio-value {
+            font-size: 34px;
+            letter-spacing: -1px;
+        }
+
+        html.mobile-layout .portfolio-hero .card-header > div:last-child .tabs {
+            display: none;
+        }
+
+        html.mobile-layout .portfolio-hero-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        html.mobile-layout .portfolio-hero-header > div:last-child {
+            justify-content: flex-end;
+        }
+
+        html.mobile-layout .sync-row.portfolio-sync-row {
+            flex-direction: row;
+            align-items: center;
+            gap: 10px;
+        }
+
+        html.mobile-layout .sync-row.portfolio-sync-header {
+            flex-wrap: wrap;
+        }
+
+        html.mobile-layout .sync-row.portfolio-sync-row .btn {
+            width: auto;
+            min-height: 40px;
+        }
+
+        html.mobile-layout .sync-row.portfolio-sync-header .btn {
+            flex-shrink: 0;
+        }
+
+        html.mobile-layout .last-sync-label {
+            font-size: 12px;
+            text-align: center;
+        }
+
+        html.mobile-layout .mini-stats {
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+
+        html.mobile-layout .chart-area { height: 180px; }
+
+        html.mobile-layout .invest-chart-wrap { height: 220px; }
+
+        html.mobile-layout .timeframes .tf-btn {
+            min-width: 36px;
+            min-height: 32px;
+        }
+
+        html.mobile-layout .responsive-table thead { display: none; }
+
+        html.mobile-layout .responsive-table .table-wrap,
+        html.mobile-layout .table-wrap:has(.responsive-table) {
+            overflow-x: visible;
+        }
+
+        html.mobile-layout .responsive-table tbody tr {
+            display: block;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            margin-bottom: 12px;
+            padding: 4px 14px 10px;
+        }
+
+        html.mobile-layout .responsive-table tbody tr:has(td[colspan]) {
+            background: transparent;
+            border: none;
+            padding: 0;
+            margin-bottom: 0;
+        }
+
+        html.mobile-layout .responsive-table tbody tr:hover td {
+            background: transparent;
+        }
+
+        html.mobile-layout .responsive-table tbody tr:last-child {
+            margin-bottom: 0;
+        }
+
+        html.mobile-layout .responsive-table td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            text-align: right;
+        }
+
+        html.mobile-layout .responsive-table td:last-child { border-bottom: none; }
+
+        html.mobile-layout .responsive-table td::before {
+            content: attr(data-label);
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            font-weight: 500;
+            text-align: left;
+            flex-shrink: 0;
+        }
+
+        html.mobile-layout .responsive-table td[data-label=""]::before,
+        html.mobile-layout .responsive-table td:not([data-label])::before {
+            display: none;
+        }
+
+        html.mobile-layout .responsive-table td:first-child {
+            display: block;
+            padding: 12px 0 10px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+
+        html.mobile-layout .responsive-table td:first-child::before { display: none; }
+
+        html.mobile-layout .responsive-table td.mob-actions {
+            justify-content: flex-end;
+            padding-top: 8px;
+        }
+
+        html.mobile-layout .responsive-table td[colspan] {
+            display: block;
+            border: none;
+            padding: 0;
+        }
+
+        html.mobile-layout .responsive-table td[colspan]::before { display: none; }
+
+        html.mobile-layout .responsive-table .pnl-cell {
+            min-width: 0;
+            text-align: right;
+        }
+
+        html.mobile-layout .responsive-table .btn-danger {
+            min-height: 40px;
+            min-width: 40px;
+            padding: 8px 14px;
+        }
+
+        html.mobile-layout body.modal-open .mobile-bottom-nav,
+        body.modal-open html.mobile-layout .mobile-bottom-nav {
+            display: none !important;
+        }
+
+        body.modal-open .mobile-bottom-nav {
+            display: none !important;
+        }
+
+        html.mobile-layout .modal-overlay {
+            padding: 0;
+            align-items: stretch;
+        }
+
+        html.mobile-layout .modal {
+            max-width: none;
+            max-height: none;
+            height: 100%;
+            border-radius: 0;
+            border: none;
+            display: flex;
+            flex-direction: column;
+        }
+
+        html.mobile-layout .modal-header {
+            padding: 16px 18px;
+            padding-top: calc(16px + env(safe-area-inset-top));
+            flex-shrink: 0;
+        }
+
+        html.mobile-layout .modal-body {
+            padding: 18px;
+            padding-bottom: calc(18px + env(safe-area-inset-bottom));
+            flex: 1;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        html.mobile-layout .modal-close {
+            width: 44px;
+            height: 44px;
+        }
+
+        html.mobile-layout .form-row { grid-template-columns: 1fr; }
+
+        html.mobile-layout .form-input,
+        html.mobile-layout .form-select,
+        html.mobile-layout .btn,
+        html.mobile-layout .trade-mode-btn {
+            min-height: 48px;
+            font-size: 16px;
+        }
+
+        html.mobile-layout .btn-sm {
+            min-height: 40px;
+            font-size: 13px;
+        }
+
+        html.mobile-layout .coin-picker-grid {
+            grid-template-columns: repeat(3, 1fr);
+            max-height: 220px;
+        }
+
+        html.mobile-layout .coin-picker-item {
+            min-height: 56px;
+            padding: 10px 6px;
+        }
+
+        html.mobile-layout .coin-add-row { flex-direction: column; }
+
+        html.mobile-layout .coin-add-row .btn { width: 100%; }
+
+        html.mobile-layout .trade-mode-toggle {
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        html.mobile-layout .trade-mode-btn {
+            width: 100%;
+            justify-content: center;
+        }
+
+        html.mobile-layout .btn-full {
+            min-height: 52px;
+            font-size: 16px;
+            margin-top: 8px;
+        }
+
+        html.mobile-layout .toast {
+            bottom: calc(76px + env(safe-area-inset-bottom));
+            left: 16px;
+            right: 16px;
+        }
+
+        html.mobile-layout .donut-wrap {
+            max-width: 220px;
+            margin: 0 auto;
+        }
+
+        html.mobile-layout .col-right .card-header .tabs { display: none; }
+
+        html.mobile-layout .modal-chart {
+            max-width: none;
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+            border: none;
+        }
+
+        html.mobile-layout #chartModal.modal-overlay {
+            padding: 0;
+            align-items: stretch;
+        }
+
+        html.mobile-layout .chart-modal-body {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        html.mobile-layout .chart-modal-layout {
+            flex-direction: column;
+        }
+
+        html.mobile-layout .chart-coin-panel {
+            width: 100%;
+            max-height: 42vh;
+            border-right: none;
+            border-bottom: 1px solid var(--border);
+        }
+
+        html.mobile-layout .tv-chart-container { min-height: 280px; }
+
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; }
+            .mobile-only { display: block; }
+            .desktop-only { display: none !important; }
+            .mobile-bottom-nav { display: flex !important; }
+            .page-content { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+            .responsive-table thead { display: none; }
+            .responsive-table tbody tr { display: block; }
+            .responsive-table td { display: flex; justify-content: space-between; }
+            .responsive-table td:first-child { display: block; }
+            .responsive-table td::before { content: attr(data-label); font-size: 10px; color: var(--text-muted); }
+            .responsive-table td[data-label=""]::before,
+            .responsive-table td:not([data-label])::before,
+            .responsive-table td:first-child::before { display: none; }
+        }
+
+        html.mobile-layout.narrow .portfolio-value { font-size: 28px; }
+        html.mobile-layout.narrow .mob-nav-label { font-size: 9px; }
+        html.mobile-layout.narrow .coin-picker-grid { grid-template-columns: repeat(2, 1fr); }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">V</div>
+            <nav class="nav-items">
+                <button class="nav-btn active" onclick="scrollToSection('home')" title="Главная">⌂</button>
+                <button class="nav-btn" onclick="scrollToSection('positions')" title="Позиции">◫</button>
+                <button class="nav-btn" onclick="scrollToSection('history')" title="История">☰</button>
+                <button class="nav-btn" onclick="openSettings()" title="Настройки">⚙</button>
+            </nav>
+            <div class="nav-bottom">
+                <button class="nav-btn" onclick="syncPrices()" title="Синхронизировать">⟳</button>
+            </div>
+        </aside>
+
+        <!-- Main -->
+        <div class="main">
+            <header class="topbar">
+                <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span> <span>Портфель</span><span class="mobile-only" style="margin-left:6px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span></div>
+                <div class="topbar-right">
+                    <button class="btn btn-outline btn-sm mobile-only" onclick="syncPrices()" title="Синхронизировать">⟳</button>
+                    <div class="search-box desktop-only">
+                        <span style="color:var(--text-muted)">⌕</span>
+                        <input type="text" placeholder="Поиск активов..." id="searchInput" oninput="syncSearchFromDesktop(this)">
+                    </div>
+                    <button class="icon-btn desktop-only" title="Уведомления">🔔</button>
+                    <div class="avatar desktop-only"></div>
+                    <button class="btn btn-outline btn-sm desktop-only" onclick="syncPrices()" title="Синхронизировать">⟳</button>
+                    <button class="btn btn-primary btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
+                </div>
+            </header>
+
+            <div class="mobile-search-bar mobile-only">
+                <div class="search-box mobile-search-box">
+                    <span style="color:var(--text-muted)">⌕</span>
+                    <input type="text" placeholder="Поиск позиций..." id="searchInputMobile" oninput="syncSearchFromMobile(this)">
+                </div>
+            </div>
+
+            <div class="page-content">
+                <div class="auth-banner" id="authBanner">
+                    <h3>⚠ Нужно выдать разрешение скрипту</h3>
+                    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">Без этого Google блокирует запросы к CoinMarketCap.</p>
+                    <ol>
+                        <li>Нажми <strong>«Открыть Apps Script»</strong></li>
+                        <li>Выбери <strong>authorizeExternalRequests</strong> → Выполнить → Разрешить</li>
+                        <li>Вернись и нажми <strong>«Проверить API»</strong></li>
+                    </ol>
+                    <div class="auth-actions">
+                        <a class="btn btn-primary" id="openScriptBtn" href="#" target="_blank">Открыть Apps Script</a>
+                        <button class="btn btn-ghost" onclick="checkApiConnection()">Проверить API</button>
+                    </div>
+                </div>
+
+                <div class="bg-sync-banner" id="bgSyncBanner">
+                    <h3>⏱ Фоновая синхронизация не включена</h3>
+                    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">
+                        Google не позволяет включить её из браузера — нужна одноразовая настройка в редакторе Apps Script.
+                        Пока приложение открыто, цены всё равно обновляются автоматически раз в 4 часа.
+                    </p>
+                    <ol>
+                        <li>Нажми <strong>«Открыть Apps Script»</strong></li>
+                        <li>Выбери функцию <strong>setupAutoUpdate</strong></li>
+                        <li>Нажми <strong>▶ Выполнить</strong> → <strong>Разрешить</strong></li>
+                        <li>Обнови эту страницу</li>
+                    </ol>
+                    <div class="auth-actions">
+                        <a class="btn btn-primary" id="openScriptBtnBgSync" href="#" target="_blank">Открыть Apps Script</a>
+                        <button class="btn btn-ghost" type="button" onclick="installBackgroundSync()">Проверить снова</button>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <!-- LEFT COLUMN -->
+                    <div class="col-left">
+                        <!-- Total Portfolio -->
+                        <div class="card portfolio-hero" id="home">
+                            <div class="card-header portfolio-hero-header">
+                                <div class="portfolio-hero-intro">
+                                    <div class="card-title">Общий портфель</div>
+                                    <div class="card-sub">Оценка по рыночным ценам</div>
+                                    <div class="sync-row portfolio-sync-row portfolio-sync-header">
+                                        <button class="btn btn-primary btn-sm" onclick="syncPrices()">⟳ Синхронизировать</button>
+                                        <span class="last-sync-label" id="lastSyncLabelPortfolio">Синхронизация ещё не выполнялась</span>
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0;">
+                                    <div class="tabs">
+                                        <button class="tab active">Все</button>
+                                        <button class="tab">Крипто</button>
+                                    </div>
+                                    <button class="btn btn-outline btn-sm" onclick="openModal()">+ Добавить</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="portfolio-value" id="totalBalance">$0.00</div>
+                                <div class="portfolio-invested" id="totalInvested">Всего вложено: <strong>$0.00</strong></div>
+                                <div class="portfolio-change" id="totalChange">—</div>
+                                <div class="portfolio-chart-section">
+                                    <span class="portfolio-chart-label">График инвестирования</span>
+                                    <div class="invest-chart-wrap">
+                                        <canvas id="lineChartCanvas"></canvas>
+                                    </div>
+                                </div>
+                                <div class="mini-stats">
+                                    <div class="mini-stat">
+                                        <div class="label">Нереализованный P&L</div>
+                                        <div class="value pnl-up" id="totalProfit">$0.00</div>
+                                        <div style="font-size:12px;margin-top:4px;" id="profitChange">↑ 0%</div>
+                                    </div>
+                                    <div class="mini-stat">
+                                        <div class="label">Реализованный P&L</div>
+                                        <div class="value" id="totalLoss">$0.00</div>
+                                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="lossChange">—</div>
+                                    </div>
+                                    <div class="mini-stat">
+                                        <div class="label">Уровень риска</div>
+                                        <div class="value" id="riskLevel" style="font-size:14px;">Низкий</div>
+                                        <div style="font-size:12px;color:var(--text-muted);margin-top:4px;" id="riskDesc">—</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Positions -->
+                        <div class="card" id="positions">
+                            <div class="card-header">
+                                <div class="card-title">Позиции</div>
+                                <button class="btn btn-outline btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="responsive-table positions-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Пара / Баланс</th>
+                                            <th>Текущая цена</th>
+                                            <th>Ср. вход</th>
+                                            <th>Вложено</th>
+                                            <th>Позиция</th>
+                                            <th>P&L</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="portfolioList">
+                                        <tr>
+                                            <td colspan="6">
+                                                <div class="empty-state">
+                                                    <div class="icon">◈</div>
+                                                    <h3>Позиций пока нет</h3>
+                                                    <p>Добавьте первую сделку, чтобы начать</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- History -->
+                        <div class="card" id="history">
+                            <div class="card-header">
+                                <div class="card-title">История сделок</div>
+                            </div>
+                            <div class="table-wrap">
+                                <table class="responsive-table history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Актив</th>
+                                            <th>Тип</th>
+                                            <th>Кол-во</th>
+                                            <th>Цена</th>
+                                            <th>Сумма</th>
+                                            <th>Дата</th>
+                                            <th>P&L</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="transactionsTable">
+                                        <tr>
+                                            <td colspan="8">
+                                                <div class="empty-state" style="padding:32px;">
+                                                    <div class="icon">☰</div>
+                                                    <h3>Нет сделок</h3>
+                                                    <p>Нажмите «+ Новая сделка», чтобы начать</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN -->
+                    <div class="col-right">
+                        <!-- Allocation -->
+                        <div class="card allocation-card">
+                            <div class="card-header">
+                                <div class="card-title">Аллокация</div>
+                                <div class="tabs">
+                                    <button class="tab active">Тип</button>
+                                    <button class="tab">Позиции</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="donut-wrap" id="chartWrapper" style="display:none;">
+                                    <canvas id="portfolioChart"></canvas>
+                                    <div class="donut-center">
+                                        <div class="lbl">Вложено</div>
+                                        <div class="val" id="donutCenterValue">$0</div>
+                                    </div>
+                                </div>
+                                <div id="allocationLegend" class="legend"></div>
+                                <div id="allocationEmpty" class="empty-state" style="padding:32px;">
+                                    <div class="icon">◈</div>
+                                    <p>Нет данных аллокации</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Prices promo -->
+                        <div class="card promo-card">
+                            <div class="card-body-pad">
+                                <div class="promo-icon">⚡</div>
+                                <div class="promo-title">Котировки CMC</div>
+                                <div class="promo-text" id="priceCacheStatus">Цены из кэша. Имена монет сохраняются навсегда после первой синхронизации. API — раз в 4 ч.</div>
+                            </div>
+                        </div>
+
+                        <!-- Risk Analysis -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">Анализ рисков</div>
+                                <span class="premium-badge">Про</span>
+                            </div>
+                            <div class="risk-widget">
+                                <div class="risk-bar">
+                                    <div class="risk-fill" id="riskFill" style="width:0%"></div>
+                                </div>
+                                <div class="risk-meta">
+                                    <span>Консервативный</span>
+                                    <span>Умеренный</span>
+                                    <span>Агрессивный</span>
+                                </div>
+                                <div class="risk-stats">
+                                    <div class="risk-stat">
+                                        <div class="v" id="riskVolatility">0</div>
+                                        <div class="l">Индекс риска</div>
+                                    </div>
+                                    <div class="risk-stat">
+                                        <div class="v" id="riskConcentration">0%</div>
+                                        <div class="l">Концентрация</div>
+                                    </div>
+                                    <div class="risk-stat">
+                                        <div class="v" id="riskDiversification">0</div>
+                                        <div class="l">Активов</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">Доходность</div>
+                            </div>
+                            <div class="perf-chart">
+                                <canvas id="perfChartCanvas"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- UCID Tracker -->
+                        <div class="card" id="settingsPanel">
+                            <div class="card-header">
+                                <div class="card-title">Трекер активов</div>
+                            </div>
+                            <div class="card-body-pad">
+                                <div class="form-group">
+                                    <label class="form-label">Символ или UCID</label>
+                                    <div style="display:flex;gap:8px;">
+                                        <input type="text" id="newAssetInput" class="form-input" placeholder="UCID с CoinMarketCap (20947)">
+                                        <button class="btn btn-primary" onclick="addNewCoinToList()">+</button>
+                                    </div>
+                                    <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">SUI UCID: <strong style="color:var(--cyan)">20947</strong></p>
+                                    <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">
+                                        <a id="spreadsheetLink" href="#" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none;">Открыть Google Таблицу</a> — сделки хранятся на листе «Сделки»
+                                    </p>
+                                    <button type="button" class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="runDiagnostics()">Проверить данные сделок</button>
+                                    <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="forceSyncPrices()" title="Игнорирует 4-часовой лимит — использовать только для проверки">⚡ Принудительная синхронизация (тест)</button>
+                                </div>
+                                <div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+                                    <label class="form-label">График TradingView — другая биржа</label>
+                                    <p style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">Если монеты нет на Binance, укажите символ с нужной биржи. Формат: <strong style="color:var(--cyan)">MEXC:TOKENUSDT</strong>, <strong style="color:var(--cyan)">GATEIO:TOKEN_USDT</strong>, <strong style="color:var(--cyan)">OKX:TOKENUSDT</strong></p>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" style="font-size:10px;">Тикер / UCID</label>
+                                            <input type="text" id="tvOverrideCoin" class="form-input" placeholder="LOOKS или 20947">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" style="font-size:10px;">Биржа</label>
+                                            <select id="tvOverrideExchange" class="form-select">
+                                                <option value="MEXC">MEXC</option>
+                                                <option value="GATEIO">Gate.io</option>
+                                                <option value="OKX">OKX</option>
+                                                <option value="BYBIT">Bybit</option>
+                                                <option value="KUCOIN">KuCoin</option>
+                                                <option value="BITGET">Bitget</option>
+                                                <option value="HUOBI">HTX (Huobi)</option>
+                                                <option value="BINANCE">Binance</option>
+                                                <option value="CUSTOM">Свой символ ↓</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="margin-top:8px;">
+                                        <label class="form-label" style="font-size:10px;">Полный символ (если «Свой символ» или нестандартная пара)</label>
+                                        <input type="text" id="tvOverrideSymbol" class="form-input" placeholder="MEXC:5IREUSDT или GATEIO:LOOKS_USDT">
+                                    </div>
+                                    <button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px;" onclick="saveTvSymbolOverride()">Сохранить для графика</button>
+                                    <div id="tvOverrideList" class="tv-override-list"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <nav class="mobile-bottom-nav mobile-only" id="mobileBottomNav" aria-label="Навигация">
+        <button type="button" class="mob-nav-btn active" data-section="home" onclick="mobileNav('home')">
+            <span class="mob-nav-icon">⌂</span>
+            <span class="mob-nav-label">Портфель</span>
+        </button>
+        <button type="button" class="mob-nav-btn" data-section="positions" onclick="mobileNav('positions')">
+            <span class="mob-nav-icon">◫</span>
+            <span class="mob-nav-label">Позиции</span>
+        </button>
+        <button type="button" class="mob-nav-btn" data-section="history" onclick="mobileNav('history')">
+            <span class="mob-nav-icon">☰</span>
+            <span class="mob-nav-label">История</span>
+        </button>
+        <button type="button" class="mob-nav-btn mob-nav-add" onclick="openModal()">
+            <span class="mob-nav-icon">+</span>
+            <span class="mob-nav-label">Сделка</span>
+        </button>
+    </nav>
+
+    <!-- Hidden quick form (needed by JS) -->
+    <form id="quickForm" class="hidden-panel" onsubmit="submitTransactionForm(event)">
+        <select id="qType"><option value="Покупка">Покупка</option><option value="Продажа">Продажа</option><option value="Аирдроп">Аирдроп</option><option value="Скам">Скам</option></select>
+        <input id="qCoin" type="text">
+        <input id="qTotal" type="number">
+        <input id="qPrice" type="number">
+        <input id="qAmount" type="number">
+        <input id="qDate" type="date">
+        <input id="qFee" type="number" value="0">
+    </form>
+
+    <!-- Modal -->
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Новая сделка</div>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="modalForm" onsubmit="submitTransactionForm(event)">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Тип</label>
+                            <select class="form-select" id="mType" onchange="updateTransactionFormFields()">
+                                <option value="Покупка">Покупка</option>
+                                <option value="Продажа">Продажа</option>
+                                <option value="Аирдроп">Аирдроп (бесплатно)</option>
+                                <option value="Скам">Скам (потеря)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Дата</label>
+                            <input type="date" class="form-input" id="mDate" required>
+                        </div>
+                    </div>
+                    <div class="form-group coin-picker-wrap" id="mCoinPickerWrap">
+                        <label class="form-label">Актив — нажмите на монету</label>
+                        <input type="text" class="form-input coin-picker-search" id="mCoinSearch" placeholder="Поиск: название, тикер или UCID..." oninput="filterCoinPicker()">
+                        <div id="mCoinPicker" class="coin-picker-grid"></div>
+                        <div class="coin-add-row">
+                            <input type="text" class="form-input" id="mCoinNew" placeholder="UCID (напр. 20947 для Sui)">
+                            <button type="button" class="btn btn-secondary" onclick="saveNewAsset()">+ В список</button>
+                        </div>
+                        <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0;">UCID — число в URL монеты на CoinMarketCap: coinmarketcap.com/currencies/sui → <strong>20947</strong></p>
+                        <input type="hidden" id="mCoin" value="">
+                    </div>
+                    <div class="form-group hidden-panel" id="mScamField">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Тикер</label>
+                                <input type="text" class="form-input" id="mScamCoin" placeholder="ALT, LTMUB..." autocomplete="off">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Вложено ($)</label>
+                                <input type="number" class="form-input" id="mScamTotal" step="any" min="0" placeholder="Сколько потеряли">
+                            </div>
+                        </div>
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Монета появится в портфеле с ценой <strong>$0</strong>. Вложения учитываются в общей сумме.</p>
+                    </div>
+                    <div id="mTradeWrap">
+                        <div class="trade-mode-toggle" id="mTradeModeToggle">
+                            <button type="button" class="trade-mode-btn active" data-mode="price" onclick="setTradeInputMode('price')">Сумма и цена</button>
+                            <button type="button" class="trade-mode-btn" data-mode="amount" onclick="setTradeInputMode('amount')">Количество и сумма</button>
+                        </div>
+                        <div class="form-row" id="mTradeFields">
+                            <div class="form-group">
+                                <label class="form-label">Сумма ($)</label>
+                                <input type="number" class="form-input" id="mTotal" step="any" min="0" oninput="updateTradeHint()">
+                            </div>
+                            <div class="form-group" id="mPriceField">
+                                <label class="form-label">Цена за монету ($)</label>
+                                <input type="number" class="form-input" id="mPrice" step="any" min="0" oninput="updateTradeHint()">
+                            </div>
+                            <div class="form-group hidden-panel" id="mAmountTradeField">
+                                <label class="form-label">Количество монет</label>
+                                <input type="number" class="form-input" id="mTradeAmount" step="any" min="0" placeholder="Сколько купили / продали" oninput="updateTradeHint()">
+                            </div>
+                        </div>
+                        <p class="trade-hint" id="mTradeHint"></p>
+                    </div>
+                    <div class="form-group hidden-panel" id="mAirdropField">
+                        <label class="form-label">Количество монет</label>
+                        <input type="number" class="form-input" id="mAmount" step="any" placeholder="Сколько монет получили бесплатно">
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Цена входа = $0. Монеты добавятся в портфель без затрат.</p>
+                    </div>
+                    <div class="form-row" id="mMetaFields">
+                        <div class="form-group" id="mFeeField">
+                            <label class="form-label">Комиссия ($)</label>
+                            <input type="number" class="form-input" id="mFee" value="0" step="any">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Примечание</label>
+                            <input type="text" class="form-input" id="mNote" placeholder="Необязательно">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">Сохранить сделку</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart Modal (TradingView) -->
+    <div class="modal-overlay" id="chartModal">
+        <div class="modal modal-chart">
+            <div class="modal-header">
+                <div class="modal-title" id="chartModalTitle">График монеты</div>
+                <button class="modal-close" type="button" onclick="closeChartModal()">×</button>
+            </div>
+            <div class="modal-body chart-modal-body">
+                <div class="chart-modal-layout">
+                    <aside class="chart-coin-panel" id="chartCoinPanel">
+                        <div class="chart-coin-stat">
+                            <span class="lbl">Вложено</span>
+                            <span class="val" id="chartCoinInvested">—</span>
+                            <span class="sub" id="chartCoinInvestedPct">—</span>
+                        </div>
+                        <div class="chart-coin-stat">
+                            <span class="lbl">Точка входа (ср.)</span>
+                            <span class="val" id="chartCoinEntry">—</span>
+                            <span class="sub" id="chartCoinAmount">—</span>
+                        </div>
+                        <div class="chart-coin-stat">
+                            <span class="lbl">Текущая цена</span>
+                            <span class="val" id="chartCoinPrice">—</span>
+                            <span class="sub" id="chartCoinPnl">—</span>
+                        </div>
+                        <div class="chart-coin-stat">
+                            <span class="lbl">До безубытка</span>
+                            <span class="val" id="chartCoinBreakeven">—</span>
+                            <span class="sub neutral" id="chartCoinBreakevenHint">от текущей цены до нуля P&L</span>
+                        </div>
+                        <div class="chart-coin-divider"></div>
+                        <div class="chart-sim-section">
+                            <div class="chart-sim-title">Моделирование докупки</div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Сумма ($)</label>
+                                <input type="number" class="form-input" id="chartSimUsd" min="0" step="any" placeholder="100" oninput="updateChartSimulation()">
+                            </div>
+                            <div class="form-group" style="margin:0;">
+                                <label class="form-label">Цена покупки ($)</label>
+                                <input type="number" class="form-input" id="chartSimPrice" min="0" step="any" placeholder="0.00" oninput="updateChartSimulation()">
+                            </div>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="fillChartSimCurrentPrice()">Подставить текущую цену</button>
+                            <div class="chart-sim-result" id="chartSimResult">Укажите сумму и цену — покажем новую точку входа и % до безубытка.</div>
+                        </div>
+                    </aside>
+                    <div id="chart_tv_chart" class="tv-chart-container"></div>
+                </div>
+            </div>
+            <div class="chart-modal-footer">
+                <span id="chartModalHint" class="chart-hint">TradingView · свечи и индикаторы</span>
+                <a id="chartModalLink" href="https://www.tradingview.com/" target="_blank" rel="noopener">Открыть на TradingView ↗</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loadingText">Синхронизация с Google Sheets и CMC...</div>
+    </div>
+
+    <div class="toast" id="toast">
+        <span id="toastIcon">✓</span>
+        <span id="toastMessage">Готово</span>
+    </div>
+
+    <script>
+        let transactions = [];
+        let livePrices = {};
+        let coinMeta = {};
+        let priceCacheInfo = null;
+        let manualPrices = {};
+        let myChartInstance = null;
+        let lineChartInstance = null;
+        let perfChartInstance = null;
+        let globalHoldings = {};
+        let trackedCoins = [];
+        let userAssets = [];
+        let selectedCoin = '';
+        let selectedChartCoin = null;
+        let portfolioTvWidget = null;
+        let lastPortfolioChartCoinsKey = '';
+        let tvSymbolOverrides = {};
+        let lastUsedCoin = '';
+        try { lastUsedCoin = localStorage.getItem('vaultLastCoin') || ''; } catch (e) {}
+        let lastPortfolioHTML = '';
+        let tradeInputMode = 'price';
+        try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
+
+        document.getElementById('qDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('mDate').value = new Date().toISOString().split('T')[0];
+
+        function setActiveNav(sectionId) {
+            document.querySelectorAll('.mob-nav-btn[data-section]').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-section') === sectionId);
+            });
+            var sections = ['home', 'positions', 'history', 'settingsPanel'];
+            document.querySelectorAll('.sidebar .nav-items .nav-btn').forEach(function(btn, idx) {
+                btn.classList.toggle('active', sections[idx] === sectionId);
+            });
+        }
+
+        function scrollToSection(id) {
+            var el = document.getElementById(id);
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            setActiveNav(id);
+        }
+
+        function mobileNav(id) {
+            scrollToSection(id);
+        }
+
+        function openSettings() {
+            scrollToSection('settingsPanel');
+        }
+
+        function getSearchQuery() {
+            var desktop = document.getElementById('searchInput');
+            var mobile = document.getElementById('searchInputMobile');
+            return ((desktop && desktop.value) || (mobile && mobile.value) || '').toUpperCase();
+        }
+
+        function syncSearchFromDesktop(input) {
+            var mobile = document.getElementById('searchInputMobile');
+            if (mobile) mobile.value = input.value;
+            filterPositions();
+        }
+
+        function syncSearchFromMobile(input) {
+            var desktop = document.getElementById('searchInput');
+            if (desktop) desktop.value = input.value;
+            filterPositions();
+        }
+
+        function filterPositions() {
+            var q = getSearchQuery();
+            var tbody = document.getElementById('portfolioList');
+            if (!lastPortfolioHTML) return;
+            if (!q) { tbody.innerHTML = lastPortfolioHTML; return; }
+            var temp = document.createElement('tbody');
+            temp.innerHTML = lastPortfolioHTML;
+            var rows = temp.querySelectorAll('tr');
+            var filtered = '';
+            rows.forEach(function(row) {
+                if (row.textContent.toUpperCase().indexOf(q) !== -1) filtered += row.outerHTML;
+            });
+            tbody.innerHTML = filtered || '<tr><td colspan="6"><div class="empty-state"><p>Ничего не найдено</p></div></td></tr>';
+        }
+
+        function showLoading(show, text) {
+            if (text) document.getElementById('loadingText').textContent = text;
+            document.getElementById('loadingOverlay').classList.toggle('active', show);
+        }
+
+        document.getElementById('modal').addEventListener('click', function(e) {
+            if (e.target === document.getElementById('modal')) closeModal();
+        });
+
+        document.getElementById('chartModal').addEventListener('click', function(e) {
+            if (e.target === document.getElementById('chartModal')) closeChartModal();
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && document.getElementById('chartModal').classList.contains('active')) {
+                closeChartModal();
+            }
+        });
+
+        function isNumericId(value) {
+            return /^\d+$/.test(String(value || '').trim());
+        }
+
+        function isTickerSymbol(value) {
+            return value && !/^\d+$/.test(String(value));
+        }
+
+        function isPortfolioAsset(value) {
+            return value && (isNumericId(value) || isTickerSymbol(value));
+        }
+
+        function normalizeCoinKey(coin) {
+            var raw = String(coin || '').trim();
+            if (!raw) return '';
+            if (/^\d+(\.0+)?$/.test(raw)) return String(parseInt(raw, 10));
+            return raw.toUpperCase();
+        }
+
+        function isCoinNameResolved(coin) {
+            var meta = getCoinMeta(coin);
+            return !!(meta && meta.resolved && meta.name);
+        }
+
+        function getCoinMeta(coin) {
+            var key = normalizeCoinKey(coin);
+            return coinMeta[key] || coinMeta[coin] || coinMeta[String(coin).toUpperCase()] || null;
+        }
+
+        function getCoinUcid(coin) {
+            var meta = getCoinMeta(coin);
+            if (meta && meta.id) return String(meta.id);
+            if (isNumericId(coin)) return normalizeCoinKey(coin);
+            return '';
+        }
+
+        function getCoinName(coin) {
+            var meta = getCoinMeta(coin);
+            if (meta && meta.ambiguous) return String(coin) + ' (нужен UCID)';
+            if (meta && meta.name) return meta.name;
+            if (isNumericId(coin)) return 'UCID ' + normalizeCoinKey(coin);
+            return coin;
+        }
+
+        function getCoinSymbol(coin) {
+            var meta = getCoinMeta(coin);
+            if (meta && meta.symbol) return meta.symbol;
+            return isNumericId(coin) ? '' : normalizeCoinKey(coin);
+        }
+
+        function getCoinAvatar(coin) {
+            var sym = getCoinSymbol(coin);
+            if (sym) return sym.slice(0, 2);
+            return String(coin).slice(0, 2);
+        }
+
+        function getCoinPickerLabel(coin) {
+            var name = getCoinName(coin);
+            var sym = getCoinSymbol(coin);
+            if (sym && sym !== coin && name !== sym) return name;
+            if (isNumericId(coin)) return name;
+            return coin;
+        }
+
+        function getCoinPickerSub(coin) {
+            var sym = getCoinSymbol(coin);
+            if (isCoinNameResolved(coin)) {
+                return sym || '';
+            }
+            if (isNumericId(coin)) {
+                return 'UCID ' + normalizeCoinKey(coin);
+            }
+            return sym && sym !== coin ? sym : '';
+        }
+
+        function formatSyncDateTime(ts) {
+            if (!ts) return '—';
+            return new Date(ts).toLocaleString('ru-RU', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function formatCacheTime(ts) {
+            return formatSyncDateTime(ts);
+        }
+
+        function updateLastSyncLabels(info) {
+            var parts = [];
+            if (info && info.lastSuccessfulSyncAt) {
+                parts.push('Последняя синхронизация: <strong>' + formatSyncDateTime(info.lastSuccessfulSyncAt) + '</strong>');
+            } else {
+                parts.push('Синхронизация ещё не выполнялась');
+            }
+
+            var auto = info && info.autoSync;
+            if (auto) {
+                if (auto.triggerInstalled) {
+                    var autoLine = 'Фоновая синхронизация: активна (API раз в 4 ч.)';
+                    if (auto.lastTriggerRunAt) {
+                        autoLine += ' · триггер ' + formatSyncDateTime(auto.lastTriggerRunAt);
+                    }
+                    parts.push('<span class="auto-sync-ok">' + autoLine + '</span>');
+                } else {
+                    parts.push('<span class="auto-sync-warn">⚠ Фоновая синхронизация не установлена · <button type="button" class="btn-link-inline" onclick="installBackgroundSync()">Как включить</button></span>');
+                }
+                if (auto.lastTriggerError) {
+                    var errText = String(auto.lastTriggerError).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    parts.push('<span class="auto-sync-error">Ошибка синхронизации: ' + errText + '</span>');
+                } else if (auto.tvPairsApiDisabled) {
+                    parts.push('<span class="auto-sync-info">Графики TradingView: авто-выбор биржи недоступен на тарифе CMC. Используются резервные символы.</span>');
+                } else if (auto.lastTriggerTvWarning) {
+                    var warnText = String(auto.lastTriggerTvWarning).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    parts.push('<span class="auto-sync-info">' + warnText + '</span>');
+                }
+            }
+
+            var text = parts.join('<br>');
+            document.querySelectorAll('.last-sync-label').forEach(function(el) {
+                el.innerHTML = text;
+            });
+        }
+
+        function updatePriceCacheStatus(info, priceUpdate) {
+            var el = document.getElementById('priceCacheStatus');
+            if (!el || !info) return;
+            if (priceUpdate && priceUpdate.fromApi && priceUpdate.updatedCount > 0) {
+                el.textContent = 'Цены обновлены с API (' + priceUpdate.updatedCount + ' монет). Следующее обновление после ' + formatCacheTime(info.nextFetchAt);
+                return;
+            }
+            if (priceUpdate && priceUpdate.throttled) {
+                el.textContent = 'Котировки из кэша. Следующий запрос к API: ' + formatCacheTime(info.nextFetchAt);
+                return;
+            }
+            if (info.lastFetchAt) {
+                el.textContent = 'Котировки из кэша (обновлены ' + formatCacheTime(info.lastFetchAt) + '). API — раз в 4 ч.';
+            } else {
+                el.textContent = 'Котировки из кэша. Нажмите «Синхронизировать» для первой загрузки с API.';
+            }
+        }
+
+        function getPickerCoins(forSaleOnly) {
+            var seen = {};
+            var list = [];
+
+            function add(coin) {
+                var raw = String(coin || '').trim();
+                var c = isNumericId(raw) ? raw : raw.toUpperCase();
+                if (!c || !isPortfolioAsset(c) || seen[c]) return;
+                if (forSaleOnly && (!globalHoldings[c] || globalHoldings[c].amount <= 0)) return;
+                seen[c] = true;
+                list.push(c);
+            }
+
+            userAssets.forEach(function(c) { add(c); });
+            transactions.slice()
+                .sort(function(a, b) { return new Date(b.date) - new Date(a.date); })
+                .forEach(function(tx) { add(tx.coin); });
+            Object.keys(globalHoldings).forEach(function(c) { add(c); });
+
+            return list;
+        }
+
+        function getSelectedCoin() {
+            var type = document.getElementById('mType').value;
+            if (type === 'Скам') {
+                return document.getElementById('mScamCoin').value.toUpperCase().trim();
+            }
+            return selectedCoin || '';
+        }
+
+        function selectPickerCoin(coin) {
+            selectedCoin = String(coin || '').toUpperCase().trim();
+            document.getElementById('mCoin').value = selectedCoin;
+            document.querySelectorAll('#mCoinPicker .coin-picker-item').forEach(function(item) {
+                item.classList.toggle('active', item.getAttribute('data-coin') === selectedCoin);
+            });
+        }
+
+        function filterCoinPicker() {
+            var q = (document.getElementById('mCoinSearch').value || '').toUpperCase().trim();
+            document.querySelectorAll('#mCoinPicker .coin-picker-item').forEach(function(item) {
+                var coin = item.getAttribute('data-coin') || '';
+                var meta = getCoinMeta(coin);
+                var hay = coin + ' ' + getCoinName(coin) + ' ' + getCoinSymbol(coin) +
+                    (meta && meta.id ? (' ' + meta.id) : '');
+                item.style.display = !q || hay.toUpperCase().indexOf(q) !== -1 ? '' : 'none';
+            });
+        }
+
+        function renderCoinPicker() {
+            var type = document.getElementById('mType').value;
+            var forSaleOnly = type === 'Продажа';
+            var coins = getPickerCoins(forSaleOnly);
+            var picker = document.getElementById('mCoinPicker');
+            var html = '';
+
+            if (coins.length === 0) {
+                html = '<div class="coin-picker-empty">' +
+                    (forSaleOnly ? 'Нет монет для продажи' : 'Добавьте UCID кнопкой «+ В список»') +
+                    '</div>';
+                selectedCoin = '';
+                document.getElementById('mCoin').value = '';
+            } else {
+                coins.forEach(function(coin) {
+                    var balance = globalHoldings[coin] ? globalHoldings[coin].amount : 0;
+                    var balanceText = balance > 0 ? formatNumber(balance) : 'нет в портфеле';
+                    var sub = getCoinPickerSub(coin);
+                    html += '<button type="button" class="coin-picker-item" data-coin="' + coin + '" onclick="selectPickerCoin(\'' + coin + '\')">' +
+                        '<span class="ticker">' + getCoinPickerLabel(coin) + '</span>' +
+                        '<span class="balance">' + (sub ? sub + ' · ' : '') + balanceText + '</span>' +
+                    '</button>';
+                });
+
+                var preferred = '';
+                if (selectedCoin && coins.indexOf(selectedCoin) !== -1) preferred = selectedCoin;
+                else if (lastUsedCoin && coins.indexOf(lastUsedCoin) !== -1) preferred = lastUsedCoin;
+                else preferred = coins[0];
+
+                selectPickerCoin(preferred);
+            }
+
+            picker.innerHTML = html;
+            if (coins.length > 0) {
+                document.querySelectorAll('#mCoinPicker .coin-picker-item').forEach(function(item) {
+                    item.classList.toggle('active', item.getAttribute('data-coin') === selectedCoin);
+                });
+            }
+            filterCoinPicker();
+        }
+
+        function saveNewAsset() {
+            var input = document.getElementById('mCoinNew');
+            var val = input.value.trim();
+            if (!val) { showToast('Введите UCID', 'error'); return; }
+            if (!isNumericId(val)) {
+                showToast('UCID — это число с CoinMarketCap (напр. 20947 для Sui)', 'error');
+                return;
+            }
+
+            showLoading(true, 'Сохранение актива...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) {
+                        userAssets = res.list || [];
+                        if (res.meta) coinMeta[val] = res.meta;
+                        input.value = '';
+                        renderCoinPicker();
+                        selectPickerCoin(val);
+                        var label = res.meta && res.meta.name ? res.meta.name : val;
+                        showToast(label + ' добавлен в список');
+                    } else {
+                        showToast(res && res.error ? res.error : 'Ошибка', 'error');
+                    }
+                })
+                .withFailureHandler(function() {
+                    showLoading(false);
+                    showToast('Ошибка сохранения актива', 'error');
+                })
+                .addUserAssetCoin(val);
+        }
+
+        function jsEscape(str) {
+            return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        var TV_SYMBOL_MAP = {
+            'SUI': 'BINANCE:SUIUSDT', 'BTC': 'BINANCE:BTCUSDT', 'ETH': 'BINANCE:ETHUSDT',
+            'SOL': 'BINANCE:SOLUSDT', 'TON': 'BINANCE:TONUSDT', 'ARB': 'BINANCE:ARBUSDT',
+            'APT': 'BINANCE:APTUSDT', 'TIA': 'BINANCE:TIAUSDT', 'LDO': 'BINANCE:LDOUSDT',
+            'PYTH': 'BINANCE:PYTHUSDT', 'NOT': 'BINANCE:NOTUSDT', 'DOGS': 'BINANCE:DOGSUSDT',
+            'ZK': 'BINANCE:ZKUSDT', 'LUNC': 'BINANCE:LUNCUSDT', '1INCH': 'BINANCE:1INCHUSDT',
+            'STRK': 'BINANCE:STRKUSDT', 'THETA': 'BINANCE:THETAUSDT', 'HFT': 'BINANCE:HFTUSDT',
+            'ACH': 'BINANCE:ACHUSDT', 'MDT': 'BINANCE:MDTUSDT', 'BEAM': 'BINANCE:BEAMXUSDT',
+            'DYDX': 'BINANCE:DYDXUSDT', 'SWEAT': 'BINANCE:SWEATUSDT', 'ALI': 'BINANCE:ALIUSDT',
+            'AEVO': 'BINANCE:AEVOUSDT', 'CFG': 'BINANCE:CFGUSDT', 'PI': 'BINANCE:PIUSDT',
+            'LOOKS': 'OKX:LOOKSUSDT', '5IRE': 'MEXC:5IREUSDT', 'KISHU': 'MEXC:KISHUUSDT',
+            'AIDOGE': 'MEXC:AIDOGEUSDT', 'SIS': 'GATEIO:SIS_USDT', 'LOOP': 'GATEIO:LOOP_USDT'
+        };
+
+        /* Биржа по умолчанию, если монеты нет в TV_SYMBOL_MAP и нет своей настройки */
+        var TV_EXCHANGE_BY_TICKER = {
+            'LOOKS': 'OKX', '5IRE': 'MEXC', 'KISHU': 'MEXC', 'AIDOGE': 'MEXC',
+            'SIS': 'GATEIO', 'LOOP': 'GATEIO', 'MON': 'MEXC', 'HONEY': 'GATEIO'
+        };
+
+        function loadTvSymbolOverrides() {
+            try {
+                var raw = localStorage.getItem('vaultTvSymbols');
+                tvSymbolOverrides = raw ? JSON.parse(raw) : {};
+                if (!tvSymbolOverrides || typeof tvSymbolOverrides !== 'object') tvSymbolOverrides = {};
+            } catch (e) {
+                tvSymbolOverrides = {};
+            }
+        }
+
+        function persistTvSymbolOverrides() {
+            try { localStorage.setItem('vaultTvSymbols', JSON.stringify(tvSymbolOverrides)); } catch (e) {}
+        }
+
+        function buildTvSymbol(exchange, ticker) {
+            var t = String(ticker || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            var ex = String(exchange || 'MEXC').toUpperCase();
+            if (!t) return null;
+            if (ex === 'GATEIO') return 'GATEIO:' + t + '_USDT';
+            if (ex === 'OKX') return 'OKX:' + t + 'USDT';
+            if (ex === 'KUCOIN') return 'KUCOIN:' + t + '-USDT';
+            return ex + ':' + t + 'USDT';
+        }
+
+        function saveTvSymbolOverride() {
+            var coinRaw = document.getElementById('tvOverrideCoin').value.trim();
+            var customSymbol = document.getElementById('tvOverrideSymbol').value.trim().toUpperCase();
+            var exchange = document.getElementById('tvOverrideExchange').value;
+
+            if (!coinRaw) {
+                showToast('Укажите тикер или UCID монеты', 'error');
+                return;
+            }
+
+            var coinKey = isNumericId(coinRaw) ? normalizeCoinKey(coinRaw) : normalizeCoinKey(coinRaw);
+            var symbol = customSymbol;
+
+            if (exchange === 'CUSTOM') {
+                if (!symbol || symbol.indexOf(':') === -1) {
+                    showToast('Укажите полный символ, напр. MEXC:TOKENUSDT', 'error');
+                    return;
+                }
+            } else if (symbol && symbol.indexOf(':') !== -1) {
+                /* явный символ имеет приоритет над выбранной биржей */
+            } else {
+                var ticker = getCoinSymbol(coinKey) || (isNumericId(coinKey) ? '' : coinKey);
+                if (!ticker) ticker = coinRaw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                symbol = buildTvSymbol(exchange, ticker);
+            }
+
+            if (!symbol) {
+                showToast('Не удалось собрать символ TradingView', 'error');
+                return;
+            }
+
+            tvSymbolOverrides[coinKey] = symbol;
+            if (!isNumericId(coinKey)) {
+                var symOnly = String(coinKey).toUpperCase();
+                tvSymbolOverrides[symOnly] = symbol;
+            } else {
+                var resolvedSym = getCoinSymbol(coinKey);
+                if (resolvedSym) tvSymbolOverrides[resolvedSym.toUpperCase()] = symbol;
+            }
+
+            persistTvSymbolOverrides();
+            renderTvSymbolOverridesList();
+            document.getElementById('tvOverrideSymbol').value = symbol;
+            showToast('Символ графика сохранён: ' + symbol);
+
+            if (selectedChartCoin && (selectedChartCoin === coinKey || normalizeCoinKey(selectedChartCoin) === coinKey)) {
+                if (document.getElementById('chartModal').classList.contains('active')) {
+                    renderChartCoinPanel(selectedChartCoin);
+                    mountPortfolioChart(selectedChartCoin);
+                }
+            }
+        }
+
+        function removeTvSymbolOverride(key) {
+            delete tvSymbolOverrides[key];
+            persistTvSymbolOverrides();
+            renderTvSymbolOverridesList();
+            if (selectedChartCoin && document.getElementById('chartModal').classList.contains('active')) {
+                renderChartCoinPanel(selectedChartCoin);
+                mountPortfolioChart(selectedChartCoin);
+            }
+        }
+
+        function renderTvSymbolOverridesList() {
+            var el = document.getElementById('tvOverrideList');
+            if (!el) return;
+            var items = Object.keys(tvSymbolOverrides).map(function(key) {
+                return { key: key, symbol: tvSymbolOverrides[key] };
+            }).filter(function(item) { return item.symbol; });
+            items.sort(function(a, b) { return a.key.localeCompare(b.key); });
+
+            if (items.length === 0) {
+                el.innerHTML = '<p style="font-size:11px;color:var(--text-muted);margin-top:8px;">Своих бирж пока нет — по умолчанию Binance, иначе MEXC / Gate / OKX из таблицы.</p>';
+                return;
+            }
+
+            el.innerHTML = items.map(function(item) {
+                return '<div class="tv-override-item"><span><strong>' + item.key + '</strong> → <span class="sym">' + item.symbol + '</span></span>' +
+                    '<button type="button" title="Удалить" onclick="removeTvSymbolOverride(\'' + jsEscape(item.key) + '\')">✕</button></div>';
+            }).join('');
+        }
+
+        function getActivePortfolioCoins(holdings) {
+            return Object.keys(holdings || {})
+                .filter(function(c) { return holdings[c].amount > 0; })
+                .sort(function(a, b) {
+                    return (holdings[b].costBasis || 0) - (holdings[a].costBasis || 0);
+                });
+        }
+
+        function findHoldingKey(coin, holdings) {
+            holdings = holdings || globalHoldings;
+            if (!coin || !holdings) return null;
+            if (holdings[coin] && holdings[coin].amount > 0) return coin;
+            var target = normalizeCoinKey(coin);
+            var keys = Object.keys(holdings);
+            for (var i = 0; i < keys.length; i++) {
+                if (holdings[keys[i]].amount > 0 && normalizeCoinKey(keys[i]) === target) return keys[i];
+            }
+            return null;
+        }
+
+        function getTotalPortfolioCostBasis(holdings) {
+            var total = 0;
+            Object.keys(holdings || {}).forEach(function(c) {
+                if (holdings[c].amount > 0) total += holdings[c].costBasis || 0;
+            });
+            return total;
+        }
+
+        function formatSignedPct(value) {
+            if (value === null || value === undefined || isNaN(value)) return '—';
+            var sign = value > 0 ? '+' : '';
+            return sign + value.toFixed(2) + '%';
+        }
+
+        function calcPnlPct(currentPrice, avgBuy) {
+            if (!avgBuy || avgBuy <= 0 || currentPrice === null || isNaN(currentPrice)) return null;
+            return ((currentPrice - avgBuy) / avgBuy) * 100;
+        }
+
+        function calcBreakevenPct(currentPrice, avgBuy) {
+            if (!currentPrice || currentPrice <= 0 || !avgBuy || avgBuy <= 0) return null;
+            if (currentPrice >= avgBuy) return 0;
+            return ((avgBuy / currentPrice) - 1) * 100;
+        }
+
+        function priceInputValue(price) {
+            if (price === null || price === undefined || isNaN(price)) return '';
+            var digits = Math.min(getUsdFractionDigits(price), 8);
+            return Number(price).toFixed(digits);
+        }
+
+        function getChartCoinSnapshot(coin) {
+            var holdingKey = findHoldingKey(coin, globalHoldings);
+            var h = holdingKey ? globalHoldings[holdingKey] : null;
+            if (!h || h.amount <= 0) return null;
+
+            var currentPrice = getCurrentPrice(holdingKey);
+            if (currentPrice === null) currentPrice = getLivePrice(holdingKey, h.avgBuy);
+
+            var totalPortfolioCost = getTotalPortfolioCostBasis(globalHoldings);
+            var investedPct = totalPortfolioCost > 0 ? (h.costBasis / totalPortfolioCost * 100) : null;
+            var pnlPct = h.isRecovered ? null : calcPnlPct(currentPrice, h.avgBuy);
+            var breakevenPct = h.isRecovered ? 0 : calcBreakevenPct(currentPrice, h.avgBuy);
+
+            return {
+                holdingKey: holdingKey,
+                h: h,
+                currentPrice: currentPrice,
+                totalPortfolioCost: totalPortfolioCost,
+                investedPct: investedPct,
+                pnlPct: pnlPct,
+                breakevenPct: breakevenPct
+            };
+        }
+
+        function renderChartCoinPanel(coin) {
+            var snap = getChartCoinSnapshot(coin);
+            var investedEl = document.getElementById('chartCoinInvested');
+            var investedPctEl = document.getElementById('chartCoinInvestedPct');
+            var entryEl = document.getElementById('chartCoinEntry');
+            var amountEl = document.getElementById('chartCoinAmount');
+            var priceEl = document.getElementById('chartCoinPrice');
+            var pnlEl = document.getElementById('chartCoinPnl');
+            var breakevenEl = document.getElementById('chartCoinBreakeven');
+            var breakevenHintEl = document.getElementById('chartCoinBreakevenHint');
+            var simUsdEl = document.getElementById('chartSimUsd');
+            var simPriceEl = document.getElementById('chartSimPrice');
+
+            if (!investedEl) return;
+
+            if (!snap) {
+                investedEl.textContent = '—';
+                investedPctEl.textContent = 'Нет открытой позиции';
+                investedPctEl.className = 'sub neutral';
+                entryEl.textContent = '—';
+                amountEl.textContent = '—';
+                priceEl.textContent = '—';
+                pnlEl.textContent = '—';
+                breakevenEl.textContent = '—';
+                breakevenHintEl.textContent = '—';
+                if (simUsdEl) simUsdEl.value = '';
+                if (simPriceEl) simPriceEl.value = '';
+                document.getElementById('chartSimResult').textContent = 'Нет данных по позиции.';
+                return;
+            }
+
+            var h = snap.h;
+
+            if (h.isScam) {
+                investedEl.textContent = formatMoney(h.costBasis);
+                investedPctEl.textContent = snap.investedPct !== null
+                    ? snap.investedPct.toFixed(1) + '% портфеля · скам'
+                    : 'скам';
+                investedPctEl.className = 'sub negative';
+                entryEl.textContent = formatPrice(0);
+                amountEl.textContent = formatNumber(h.amount, 4) + ' ' + (getCoinSymbol(snap.holdingKey) || 'монет');
+                priceEl.textContent = formatPrice(0);
+                pnlEl.textContent = '−100%';
+                pnlEl.className = 'sub negative';
+                breakevenEl.textContent = '—';
+                breakevenHintEl.textContent = 'Позиция списана';
+                document.getElementById('chartSimResult').textContent = 'Для скама моделирование недоступно.';
+                return;
+            }
+
+            investedEl.textContent = h.isRecovered
+                ? formatMoney(0) + ' · отбито'
+                : formatMoney(h.costBasis);
+            if (snap.investedPct !== null) {
+                investedPctEl.textContent = h.isRecovered
+                    ? '0% в игре · ' + snap.investedPct.toFixed(1) + '% от истории'
+                    : snap.investedPct.toFixed(1) + '% от вложений портфеля';
+            } else {
+                investedPctEl.textContent = '—';
+            }
+            investedPctEl.className = 'sub neutral';
+
+            entryEl.textContent = h.isRecovered ? '—' : formatPrice(h.avgBuy);
+            amountEl.textContent = formatNumber(h.amount, 4) + ' ' + (getCoinSymbol(snap.holdingKey) || 'монет') +
+                ' · ' + formatMoney(h.amount * snap.currentPrice);
+
+            priceEl.textContent = snap.currentPrice !== null ? formatPrice(snap.currentPrice) : 'Нет данных';
+
+            if (h.isRecovered) {
+                pnlEl.textContent = 'Капитал отбит';
+                pnlEl.className = 'sub positive';
+                breakevenEl.textContent = '0%';
+                breakevenHintEl.textContent = 'Уже в безубытке';
+            } else if (snap.pnlPct !== null) {
+                pnlEl.textContent = 'P&L ' + formatSignedPct(snap.pnlPct);
+                pnlEl.className = 'sub ' + (snap.pnlPct >= 0 ? 'positive' : 'negative');
+                if (snap.breakevenPct === 0) {
+                    breakevenEl.textContent = '0%';
+                    breakevenHintEl.textContent = 'В плюсе · безубыток пройден';
+                } else {
+                    breakevenEl.textContent = '+' + snap.breakevenPct.toFixed(2) + '%';
+                    breakevenHintEl.textContent = 'рост цены до точки входа';
+                }
+            } else {
+                pnlEl.textContent = '—';
+                pnlEl.className = 'sub neutral';
+                breakevenEl.textContent = '—';
+                breakevenHintEl.textContent = 'Нужна текущая цена';
+            }
+
+            if (simPriceEl && snap.currentPrice !== null) {
+                simPriceEl.value = priceInputValue(snap.currentPrice);
+            }
+
+            updateChartSimulation();
+        }
+
+        function fillChartSimCurrentPrice() {
+            if (!selectedChartCoin) return;
+            var snap = getChartCoinSnapshot(selectedChartCoin);
+            if (!snap || snap.currentPrice === null) {
+                showToast('Нет текущей цены', 'error');
+                return;
+            }
+            document.getElementById('chartSimPrice').value = priceInputValue(snap.currentPrice);
+            updateChartSimulation();
+        }
+
+        function updateChartSimulation() {
+            var resultEl = document.getElementById('chartSimResult');
+            if (!resultEl || !selectedChartCoin) return;
+
+            var snap = getChartCoinSnapshot(selectedChartCoin);
+            if (!snap || snap.h.isScam) return;
+
+            var addUsd = parseFloat(document.getElementById('chartSimUsd').value);
+            var addPrice = parseFloat(document.getElementById('chartSimPrice').value);
+            var h = snap.h;
+            var currentPrice = snap.currentPrice;
+
+            if (!addUsd || addUsd <= 0 || !addPrice || addPrice <= 0) {
+                resultEl.innerHTML = 'Укажите сумму и цену — покажем новую точку входа и % до безубытка.';
+                return;
+            }
+
+            var addAmount = addUsd / addPrice;
+            var newAmount = h.amount + addAmount;
+            var newCostBasis = h.costBasis + addUsd;
+            var newAvgBuy = newAmount > 0 ? newCostBasis / newAmount : 0;
+
+            if (newAmount <= 0 || newAvgBuy <= 0) {
+                resultEl.textContent = 'Некорректные параметры докупки.';
+                return;
+            }
+
+            var refPrice = (currentPrice !== null && currentPrice > 0) ? currentPrice : addPrice;
+            var oldPnl = calcPnlPct(refPrice, h.isRecovered ? null : h.avgBuy);
+            var newPnl = calcPnlPct(refPrice, newAvgBuy);
+            var oldBe = h.isRecovered ? 0 : calcBreakevenPct(refPrice, h.avgBuy);
+            var newBe = calcBreakevenPct(refPrice, newAvgBuy);
+
+            var html = '<div class="sim-row"><span>Новая точка входа</span><strong>' + formatPrice(newAvgBuy) + '</strong></div>';
+            html += '<div class="sim-row"><span>Было → станет (вход)</span><strong>' +
+                (h.isRecovered || !h.avgBuy ? '—' : formatPrice(h.avgBuy)) + ' → ' + formatPrice(newAvgBuy) + '</strong></div>';
+            html += '<div class="sim-row"><span>P&L при текущей цене</span><strong>' +
+                (h.isRecovered ? 'отбито' : (oldPnl !== null ? formatSignedPct(oldPnl) : '—')) +
+                ' → ' + formatSignedPct(newPnl) + '</strong></div>';
+            html += '<div class="sim-row"><span>До безубытка</span><strong>' +
+                (oldBe === null ? '—' : (oldBe === 0 ? '0%' : '+' + oldBe.toFixed(2) + '%')) +
+                ' → ' + (newBe === 0 ? '0%' : '+' + newBe.toFixed(2) + '%') + '</strong></div>';
+            html += '<div class="sim-row"><span>Монет после докупки</span><strong>' + formatNumber(newAmount, 4) + '</strong></div>';
+
+            resultEl.innerHTML = html;
+        }
+
+        function mountPortfolioChart(coin) {
+            var meta = getCoinMeta(coin);
+            var symbol = getTradingViewSymbol(coin);
+            var container = document.getElementById('chart_tv_chart');
+            var hint = document.getElementById('chartModalHint');
+            var link = document.getElementById('chartModalLink');
+            var title = document.getElementById('chartModalTitle');
+
+            if (!container || !hint || !link) return;
+
+            container.innerHTML = '';
+            portfolioTvWidget = null;
+
+            if (title) title.textContent = getCoinName(coin);
+
+            if (!symbol) {
+                hint.textContent = 'Нет символа — синхронизируйте или задайте биржу в «Трекер активов»';
+                link.href = 'https://www.tradingview.com/markets/cryptocurrencies/prices-all/';
+                container.innerHTML = '<div class="empty-state" style="padding:48px 20px;"><div class="icon">📈</div><p>Нет символа для ' + getCoinName(coin) + '</p><p style="font-size:12px;margin-top:8px;">Настройки → График TradingView — другая биржа</p></div>';
+                return;
+            }
+
+            hint.textContent = getCoinName(coin) + ' · ' + symbol + ' · TradingView' +
+                (meta && meta.tvExchange ? ' · ' + meta.tvExchange : '');
+            link.href = 'https://www.tradingview.com/chart/?symbol=' + encodeURIComponent(symbol);
+
+            setTimeout(function() {
+                if (typeof TradingView === 'undefined') {
+                    hint.textContent = 'TradingView не загрузился — откройте ссылку справа';
+                    return;
+                }
+                try {
+                    portfolioTvWidget = new TradingView.widget({
+                        autosize: true,
+                        symbol: symbol,
+                        interval: 'D',
+                        timezone: 'Etc/UTC',
+                        theme: 'dark',
+                        style: '1',
+                        locale: 'ru',
+                        toolbar_bg: '#161616',
+                        enable_publishing: false,
+                        allow_symbol_change: true,
+                        save_image: false,
+                        container_id: 'chart_tv_chart',
+                        withdateranges: true,
+                        hide_side_toolbar: false
+                    });
+                } catch (e) {
+                    hint.textContent = 'Ошибка загрузки: ' + (e.message || e);
+                }
+            }, 80);
+        }
+
+        function openChartModal(coin) {
+            var coins = getActivePortfolioCoins(globalHoldings);
+            if (coin) {
+                selectedChartCoin = normalizeCoinKey(coin) || String(coin || '').trim();
+            } else if (!selectedChartCoin && coins.length > 0) {
+                selectedChartCoin = coins[0];
+            }
+            if (!selectedChartCoin) {
+                showToast('Нет монет для графика', 'error');
+                return;
+            }
+            var simUsd = document.getElementById('chartSimUsd');
+            var simPrice = document.getElementById('chartSimPrice');
+            if (simUsd) simUsd.value = '';
+            if (simPrice) simPrice.value = '';
+            document.getElementById('chartModal').classList.add('active');
+            document.body.classList.add('modal-open');
+            renderChartCoinPanel(selectedChartCoin);
+            mountPortfolioChart(selectedChartCoin);
+        }
+
+        function closeChartModal() {
+            document.getElementById('chartModal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+        }
+
+        function updatePortfolioChartSection(holdings) {
+            var coins = getActivePortfolioCoins(holdings);
+            var coinsKey = coins.join(',');
+
+            if (coins.length === 0) {
+                selectedChartCoin = null;
+                lastPortfolioChartCoinsKey = '';
+                return;
+            }
+
+            if (!selectedChartCoin || coins.indexOf(selectedChartCoin) === -1) {
+                selectedChartCoin = coins[0];
+            }
+
+            lastPortfolioChartCoinsKey = coinsKey;
+        }
+
+        function selectPortfolioChartCoin(coin) {
+            openChartModal(coin);
+        }
+
+        function getTradingViewSymbol(coin) {
+            var coinKey = normalizeCoinKey(coin);
+            if (tvSymbolOverrides[coinKey]) return tvSymbolOverrides[coinKey];
+
+            var meta = getCoinMeta(coin);
+            if (meta && meta.tvSymbol) return meta.tvSymbol;
+
+            var sym = getCoinSymbol(coin);
+            if (!sym && !isNumericId(coin)) sym = coinKey;
+            if (!sym) return null;
+            sym = String(sym).toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (!sym) return null;
+
+            if (tvSymbolOverrides[sym]) return tvSymbolOverrides[sym];
+            if (TV_SYMBOL_MAP[sym]) return TV_SYMBOL_MAP[sym];
+
+            if (TV_EXCHANGE_BY_TICKER[sym]) {
+                return buildTvSymbol(TV_EXCHANGE_BY_TICKER[sym], sym);
+            }
+
+            return 'BINANCE:' + sym + 'USDT';
+        }
+
+        function openModal(presetCoin) {
+            if (presetCoin) {
+                selectedCoin = String(presetCoin).toUpperCase().trim();
+                lastUsedCoin = selectedCoin;
+            }
+            document.getElementById('modal').classList.add('active');
+            document.body.classList.add('modal-open');
+            document.getElementById('mDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('mCoinSearch').value = '';
+            updateTransactionFormFields();
+        }
+
+        function openModalScam(coin) {
+            document.getElementById('mType').value = 'Скам';
+            document.getElementById('mScamCoin').value = coin ? String(coin).toUpperCase().trim() : '';
+            document.getElementById('mScamTotal').value = '';
+            openModal();
+        }
+
+        function setTradeInputMode(mode) {
+            tradeInputMode = mode === 'amount' ? 'amount' : 'price';
+            try { localStorage.setItem('vaultTradeMode', tradeInputMode); } catch (e) {}
+            document.querySelectorAll('#mTradeModeToggle .trade-mode-btn').forEach(function(btn) {
+                btn.classList.toggle('active', btn.getAttribute('data-mode') === tradeInputMode);
+            });
+            document.getElementById('mPriceField').classList.toggle('hidden-panel', tradeInputMode === 'amount');
+            document.getElementById('mAmountTradeField').classList.toggle('hidden-panel', tradeInputMode !== 'amount');
+            updateTradeHint();
+        }
+
+        function getTradeInputMode() {
+            return tradeInputMode === 'amount' ? 'amount' : 'price';
+        }
+
+        function updateTradeHint() {
+            var hint = document.getElementById('mTradeHint');
+            if (!hint) return;
+            var total = parseFloat(document.getElementById('mTotal').value);
+            if (getTradeInputMode() === 'amount') {
+                var amount = parseFloat(document.getElementById('mTradeAmount').value);
+                if (!isNaN(total) && total > 0 && !isNaN(amount) && amount > 0) {
+                    hint.innerHTML = 'Цена за монету: <strong>' + formatPrice(total / amount) + '</strong>';
+                } else {
+                    hint.textContent = 'Укажите количество монет и сумму сделки';
+                }
+            } else {
+                var price = parseFloat(document.getElementById('mPrice').value);
+                if (!isNaN(total) && total > 0 && !isNaN(price) && price > 0) {
+                    hint.innerHTML = 'Количество: <strong>' + formatNumber(total / price) + '</strong> монет';
+                } else {
+                    hint.textContent = 'Укажите сумму и цену за монету';
+                }
+            }
+        }
+
+        function updateTransactionFormFields() {
+            var type = document.getElementById('mType').value;
+            var isAirdrop = type === 'Аирдроп';
+            var isScam = type === 'Скам';
+            document.getElementById('mCoinPickerWrap').classList.toggle('hidden-panel', isAirdrop || isScam);
+            document.getElementById('mScamField').classList.toggle('hidden-panel', !isScam);
+            document.getElementById('mTradeWrap').classList.toggle('hidden-panel', isAirdrop || isScam);
+            document.getElementById('mAirdropField').classList.toggle('hidden-panel', !isAirdrop);
+            document.getElementById('mFeeField').classList.toggle('hidden-panel', isAirdrop || isScam);
+            document.getElementById('mNote').placeholder = isAirdrop
+                ? 'Например: Binance Launchpool, testnet...'
+                : (isScam ? 'Например: rug pull, делистинг...' : 'Необязательно');
+            if (!isAirdrop && !isScam) {
+                setTradeInputMode(getTradeInputMode());
+            }
+            if (!isScam) renderCoinPicker();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+        }
+
+        function showToast(message, type) {
+            var toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = message;
+            document.getElementById('toastIcon').textContent = type === 'error' ? '✕' : '✓';
+            toast.className = 'toast show ' + (type || 'success');
+            setTimeout(function() { toast.classList.remove('show'); }, 4000);
+        }
+
+        function showAuthBanner(show) {
+            document.getElementById('authBanner').classList.toggle('visible', !!show);
+        }
+
+        function showApiError(message) {
+            if (message && (message.indexOf('external_request') !== -1 || message.indexOf('UrlFetchApp') !== -1 || message.indexOf('разрешения') !== -1 || message.indexOf('authorizeExternalRequests') !== -1)) {
+                showAuthBanner(true);
+                showToast('Выдай разрешение в Apps Script', 'error');
+                return;
+            }
+            showToast(message, 'error');
+        }
+
+        function checkApiConnection() {
+            showLoading(true, 'Проверка...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    showLoading(false);
+                    if (result && result.ok) {
+                        showAuthBanner(false);
+                        showToast(result.message || 'Ключ настроен');
+                    } else {
+                        showAuthBanner(true);
+                        showToast(result && result.message ? result.message : 'API не настроен', 'error');
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showAuthBanner(true);
+                    showApiError(err.message || String(err));
+                })
+                .checkApiAccess();
+        }
+
+        function showBgSyncBanner(show) {
+            var el = document.getElementById('bgSyncBanner');
+            if (el) el.classList.toggle('visible', !!show);
+        }
+
+        function installBackgroundSync() {
+            showLoading(true, 'Проверка фоновой синхронизации...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (!res) {
+                        showToast('Пустой ответ сервера', 'error');
+                        return;
+                    }
+                    if (res.success) {
+                        showBgSyncBanner(false);
+                        showToast(res.created ? 'Фоновая синхронизация включена!' : 'Фоновая синхронизация уже активна', 'success');
+                        updateLastSyncLabels({
+                            lastSuccessfulSyncAt: priceCacheInfo && priceCacheInfo.lastSuccessfulSyncAt,
+                            autoSync: res.autoSync
+                        });
+                        return;
+                    }
+                    showBgSyncBanner(true);
+                    var editorUrl = res.editorUrl || (document.getElementById('openScriptBtn') && document.getElementById('openScriptBtn').href);
+                    if (editorUrl && editorUrl !== '#') {
+                        var bgBtn = document.getElementById('openScriptBtnBgSync');
+                        if (bgBtn) bgBtn.href = editorUrl;
+                        window.open(editorUrl, '_blank');
+                    }
+                    var err = (res.triggerSetup && res.triggerSetup.error) ? res.triggerSetup.error : 'Нужна настройка в редакторе Apps Script';
+                    showToast(err, 'error');
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showBgSyncBanner(true);
+                    showToast('Ошибка: ' + (err.message || err), 'error');
+                })
+                .installBackgroundSync();
+        }
+
+        function handleDataResult(result, options) {
+            options = options || {};
+            if (!result) {
+                showLoading(false);
+                showToast('Пустой ответ от сервера', 'error');
+                return;
+            }
+
+            if (result.error) {
+                showToast(result.error, 'error');
+            }
+
+            transactions = result.transactions || [];
+            livePrices = result.livePrices || {};
+            coinMeta = result.coinMeta || {};
+            priceCacheInfo = result.priceCacheInfo || null;
+            manualPrices = result.manualPrices || {};
+            trackedCoins = result.trackedCoins || [];
+            userAssets = result.userAssets || [];
+            renderAll();
+            updatePriceCacheStatus(priceCacheInfo, result.priceUpdate);
+            if (result.autoSync) {
+                if (priceCacheInfo) priceCacheInfo.autoSync = result.autoSync;
+                showBgSyncBanner(!result.autoSync.triggerInstalled);
+            } else if (priceCacheInfo && priceCacheInfo.autoSync) {
+                showBgSyncBanner(!priceCacheInfo.autoSync.triggerInstalled);
+            }
+            updateLastSyncLabels(priceCacheInfo);
+
+            if (transactions.length === 0 && result.sheetRows > 1) {
+                showToast('В таблице «' + (result.sheetName || 'Сделки') + '» есть ' + (result.sheetRows - 1) + ' строк, но сделки не распознаны. Проверьте колонки Тип и Монета', 'error');
+                runDiagnostics();
+            } else if (transactions.length === 0 && (!result.sheetRows || result.sheetRows <= 1)) {
+                showToast('Сделок нет. Добавьте через «+ Новая сделка» или откройте Google Таблицу', 'error');
+            }
+
+                    var missing = (result.missingPrices || []).filter(function(c) {
+                        return !isScamCoin(c);
+                    });
+                    if (missing.length > 0) {
+                        var ambiguous = missing.filter(function(c) {
+                            var m = (result.coinMeta || {})[normalizeCoinKey(c)] || (result.coinMeta || {})[c];
+                            return m && m.ambiguous;
+                        });
+                        if (ambiguous.length > 0) {
+                            showToast('Для «' + ambiguous.join(', ') + '» укажите UCID вместо тикера (несколько монет с этим символом)', 'error');
+                        }
+                        if (options.isSync && result.priceUpdate && result.priceUpdate.throttled) {
+                            showApiError('Запрос к API отложен (не чаще 1 раза в 4 ч). Следующая попытка: ' +
+                                formatCacheTime(priceCacheInfo && priceCacheInfo.nextFetchAt) +
+                                '. Пока без цены: ' + missing.join(', '));
+                        } else {
+                            var details = (result.priceUpdate && result.priceUpdate.errors && result.priceUpdate.errors.length > 0)
+                                ? ' (' + result.priceUpdate.errors[0] + ')' : '';
+                            showApiError('Нет цены для: ' + missing.join(', ') + details);
+                            if (details.indexOf('external_request') !== -1) showAuthBanner(true);
+                        }
+            } else if (result.priceUpdate && result.priceUpdate.errors && result.priceUpdate.errors.length > 0) {
+                showApiError('Ошибка API: ' + result.priceUpdate.errors[0]);
+            } else {
+                showAuthBanner(false);
+                if (result.autoSyncedOnLoad && result.priceUpdate && result.priceUpdate.fromApi) {
+                    showToast('Цены обновлены автоматически (' + (result.priceUpdate.updatedCount || 0) + ' монет)');
+                } else if (options.isSync && result.priceUpdate && result.priceUpdate.throttled) {
+                    showToast('Котировки из кэша. API можно вызвать после ' + formatCacheTime(priceCacheInfo && priceCacheInfo.nextFetchAt));
+                } else if (options.isSync && result.priceUpdate && result.priceUpdate.fromApi) {
+                    showToast('Цены обновлены с API (' + (result.priceUpdate.updatedCount || 0) + ' монет)');
+                } else if (options.isSync) {
+                    showToast('Данные загружены (' + transactions.length + ' сделок)');
+                }
+            }
+            showLoading(false);
+        }
+
+        function refreshData() {
+            showLoading(true, 'Загрузка данных...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    handleDataResult(result, { isSync: false });
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка загрузки: ' + (err.message || err), 'error');
+                })
+                .getTransactionsWithAutoSync();
+        }
+
+        function syncPrices() {
+            showLoading(true, 'Синхронизация цен...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    handleDataResult(result, { isSync: true });
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка синхронизации: ' + (err.message || err), 'error');
+                })
+                .syncAndGetTransactions();
+        }
+
+        function forceSyncPrices() {
+            showLoading(true, 'Принудительная синхронизация (без учёта лимита)...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    handleDataResult(result, { isSync: true });
+                    showToast('Принудительная синхронизация выполнена');
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка синхронизации: ' + (err.message || err), 'error');
+                })
+                .forceSyncAndGetTransactions();
+        }
+
+        function loadSetupInfo() {
+            google.script.run
+                .withSuccessHandler(function(info) {
+                    if (info && info.scriptEditorUrl) {
+                        document.getElementById('openScriptBtn').href = info.scriptEditorUrl;
+                        var bgBtn = document.getElementById('openScriptBtnBgSync');
+                        if (bgBtn) bgBtn.href = info.scriptEditorUrl;
+                    }
+                    if (info && info.spreadsheetUrl) {
+                        var link = document.getElementById('spreadsheetLink');
+                        if (link) link.href = info.spreadsheetUrl;
+                    }
+                    if (info && info.error) {
+                        showToast(info.error, 'error');
+                    }
+                    if (info && info.autoSync) {
+                        showBgSyncBanner(!info.autoSync.triggerInstalled);
+                        if (priceCacheInfo) {
+                            priceCacheInfo.autoSync = info.autoSync;
+                            updateLastSyncLabels(priceCacheInfo);
+                        }
+                    }
+                })
+                .getSetupInfo();
+        }
+
+        function runDiagnostics() {
+            showLoading(true, 'Диагностика...');
+            google.script.run
+                .withSuccessHandler(function(d) {
+                    showLoading(false);
+                    if (!d) { showToast('Пустой ответ диагностики', 'error'); return; }
+                    if (d.error) { showToast(d.error, 'error'); return; }
+                    showToast(d.message || 'Диагностика завершена', d.ok ? 'success' : 'error');
+                    if (d.spreadsheetUrl) {
+                        var link = document.getElementById('spreadsheetLink');
+                        if (link) link.href = d.spreadsheetUrl;
+                    }
+                    console.log('diagnoseTransactions', d);
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка диагностики: ' + (err.message || err), 'error');
+                })
+                .diagnoseTransactions();
+        }
+
+        function addNewCoinToList() {
+            var input = document.getElementById('newAssetInput');
+            var val = input.value.trim();
+            if (!val) { showToast('Введите UCID', 'error'); return; }
+            if (!isNumericId(val)) {
+                showToast('UCID — число с CoinMarketCap (напр. 20947)', 'error');
+                return;
+            }
+            showLoading(true, 'Добавление актива...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res.success) {
+                        showToast('Актив добавлен!');
+                        input.value = '';
+                        refreshData();
+                    } else { showToast(res.error, 'error'); }
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка', 'error'); })
+                .addTrackedCoinOrId(val);
+        }
+
+        function submitTransactionForm(e) {
+            e.preventDefault();
+            var isModal = e.target.id === 'modalForm';
+            var prefix = isModal ? 'm' : 'q';
+            var type = document.getElementById(prefix + 'Type').value;
+            var coin = isModal ? getSelectedCoin() : document.getElementById(prefix + 'Coin').value.toUpperCase().trim();
+            var tx;
+
+            if (type === 'Скам') {
+                if (!isModal) {
+                    showToast('Скам добавляется через «Новая сделка»', 'error');
+                    return;
+                }
+                var scamTotal = parseFloat(document.getElementById('mScamTotal').value);
+                if (!coin) { showToast('Укажите тикер', 'error'); return; }
+                if (isNaN(scamTotal) || scamTotal <= 0) {
+                    showToast('Укажите сумму вложений ($)', 'error'); return;
+                }
+                tx = {
+                    id: String(Date.now()), type: type, coin: coin,
+                    amount: 1, price: scamTotal, total: scamTotal,
+                    date: document.getElementById(prefix + 'Date').value,
+                    fee: 0,
+                    note: document.getElementById('mNote').value || 'Скам'
+                };
+            } else if (type === 'Аирдроп') {
+                var airdropAmount = parseFloat(document.getElementById(isModal ? 'mAmount' : 'qAmount').value);
+                if (!coin) { showToast('Укажите монету', 'error'); return; }
+                if (isNaN(airdropAmount) || airdropAmount <= 0) {
+                    showToast('Укажите количество монет из аирдропа', 'error'); return;
+                }
+                tx = {
+                    id: String(Date.now()), type: type, coin: coin,
+                    amount: airdropAmount, price: 0, total: 0,
+                    date: document.getElementById(prefix + 'Date').value,
+                    fee: 0,
+                    note: isModal ? (document.getElementById('mNote').value || 'Аирдроп') : 'Аирдроп'
+                };
+            } else {
+                var totalMoney = parseFloat(document.getElementById(prefix + 'Total').value);
+                var computedAmount, assetPrice;
+                var useAmountMode = isModal && getTradeInputMode() === 'amount';
+
+                if (useAmountMode) {
+                    computedAmount = parseFloat(document.getElementById('mTradeAmount').value);
+                    if (isNaN(totalMoney) || totalMoney <= 0 || isNaN(computedAmount) || computedAmount <= 0) {
+                        showToast('Укажите количество монет и сумму сделки', 'error'); return;
+                    }
+                    assetPrice = totalMoney / computedAmount;
+                } else {
+                    assetPrice = parseFloat(document.getElementById(prefix + 'Price').value);
+                    if (isNaN(totalMoney) || isNaN(assetPrice) || assetPrice <= 0 || totalMoney <= 0) {
+                        showToast('Укажите сумму и цену за монету', 'error'); return;
+                    }
+                    computedAmount = totalMoney / assetPrice;
+                }
+
+                if (!coin) { showToast('Выберите монету', 'error'); return; }
+                if (type === 'Продажа') {
+                    var available = globalHoldings[coin] ? globalHoldings[coin].amount : 0;
+                    if (available <= 0) { showToast('Монеты ' + coin + ' нет в портфеле', 'error'); return; }
+                    if (available < computedAmount - 0.000001) {
+                        showToast('Недостаточно монет: ' + formatNumber(available, 4), 'error'); return;
+                    }
+                }
+
+                tx = {
+                    id: String(Date.now()), type: type, coin: coin,
+                    amount: computedAmount, price: assetPrice, total: totalMoney,
+                    date: document.getElementById(prefix + 'Date').value,
+                    fee: parseFloat(document.getElementById(prefix + 'Fee').value) || 0,
+                    note: isModal ? (document.getElementById('mNote').value || '') : ''
+                };
+            }
+
+            showLoading(true, 'Сохранение...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    showLoading(false);
+                    if (result && result.success) {
+                        lastUsedCoin = coin;
+                        selectedCoin = coin;
+                        try { localStorage.setItem('vaultLastCoin', coin); } catch (e) {}
+                        e.target.reset();
+                        document.getElementById('mFee').value = '0';
+                        document.getElementById('mCoinSearch').value = '';
+                        document.getElementById('mScamCoin').value = '';
+                        document.getElementById('mScamTotal').value = '';
+                        document.getElementById('mTradeAmount').value = '';
+                        document.getElementById('mTradeHint').textContent = '';
+                        document.getElementById(prefix + 'Date').value = new Date().toISOString().split('T')[0];
+                        if (isModal) {
+                            document.getElementById('mFee').value = '0';
+                            updateTransactionFormFields();
+                            closeModal();
+                        }
+                        var toastMsg = type === 'Аирдроп' ? 'Аирдроп добавлен!' : (type === 'Скам' ? 'Скам добавлен!' : 'Сделка сохранена!');
+                        showToast(toastMsg);
+                        refreshData();
+                    } else { showToast('Ошибка: ' + result.error, 'error'); }
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка сохранения', 'error'); })
+                .addTransaction(tx);
+        }
+
+        function deleteTransaction(id) {
+            if (!confirm('Удалить сделку?')) return;
+            showLoading(true, 'Удаление...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    showLoading(false);
+                    if (result && result.success) { showToast('Сделка удалена'); refreshData(); }
+                    else showToast('Ошибка удаления', 'error');
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка удаления', 'error'); })
+                .deleteTransaction(String(id));
+        }
+
+        function getUsdFractionDigits(value) {
+            var n = Math.abs(Number(value) || 0);
+            if (!n) return 2;
+            if (n >= 1) return 2;
+            if (n >= 0.01) return 4;
+            if (n >= 0.0001) return 6;
+            if (n >= 0.000001) return 8;
+            if (n >= 0.00000001) return 10;
+            return 12;
+        }
+
+        function formatUsd(value, maxDigits) {
+            var n = Number(value) || 0;
+            var digits = maxDigits || getUsdFractionDigits(n);
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: digits,
+                maximumFractionDigits: digits
+            }).format(n);
+        }
+
+        function formatMoney(value) {
+            var n = Number(value) || 0;
+            if (Math.abs(n) > 0 && Math.abs(n) < 0.01) return formatUsd(n);
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+        }
+
+        function formatPrice(value) {
+            return formatUsd(value);
+        }
+
+        function formatNumber(value, digits) {
+            var n = Number(value) || 0;
+            if (digits) {
+                return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits }).format(n);
+            }
+            var abs = Math.abs(n);
+            var autoDigits = abs >= 1000 ? 2 : (abs >= 1 ? 4 : (abs >= 0.0001 ? 8 : 12));
+            return new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: autoDigits }).format(n);
+        }
+
+        function isScamCoin(coin) {
+            var key = normalizeCoinKey(coin);
+            for (var i = 0; i < transactions.length; i++) {
+                if (normalizeCoinKey(transactions[i].coin) === key && transactions[i].type === 'Скам') return true;
+            }
+            return false;
+        }
+
+        function getManualEntry(coin) {
+            var key = String(coin || '').toUpperCase().trim();
+            return manualPrices[key] || null;
+        }
+
+        function isManualPrice(coin) {
+            return !!getManualEntry(coin);
+        }
+
+        function getLivePriceFromMap(coin) {
+            if (typeof livePrices[coin] === 'number' && !isNaN(livePrices[coin])) {
+                return livePrices[coin];
+            }
+            var key = normalizeCoinKey(coin);
+            if (typeof livePrices[key] === 'number' && !isNaN(livePrices[key])) {
+                return livePrices[key];
+            }
+            return null;
+        }
+
+        function getCurrentPrice(coin) {
+            if (isScamCoin(coin)) return 0;
+            var manual = getManualEntry(coin);
+            if (manual && typeof manual.price === 'number' && !isNaN(manual.price)) {
+                return manual.price;
+            }
+            var p = getLivePriceFromMap(coin);
+            return (typeof p === 'number' && !isNaN(p)) ? p : null;
+        }
+
+        function formatCurrentPrice(coin) {
+            if (isScamCoin(coin)) {
+                return '<div class="mono" style="font-weight:600;color:var(--red)">' + formatPrice(0) +
+                    '<span class="price-dead-tag">скам</span></div>';
+            }
+            var manual = getManualEntry(coin);
+            if (manual && typeof manual.price === 'number' && !isNaN(manual.price)) {
+                var tag = manual.price === 0 ? 'делистинг' : 'ручная';
+                var tagClass = manual.price === 0 ? 'price-dead-tag' : 'price-manual-tag';
+                var color = manual.price === 0 ? 'var(--red)' : 'var(--orange)';
+                return '<div class="mono" style="font-weight:600;color:' + color + '">' + formatPrice(manual.price) +
+                    '<span class="' + tagClass + '">' + tag + '</span></div>';
+            }
+            var price = getCurrentPrice(coin);
+            if (price !== null) {
+                return '<div class="mono" style="font-weight:600;color:var(--cyan)">' + formatPrice(price) +
+                    '<span class="price-live-tag">CMC</span></div>';
+            }
+            return '<div class="mono" style="color:var(--orange);font-size:12px">Нет данных · <a href="#" onclick="openModalScam(\'' + coin + '\');return false;" style="color:var(--cyan)">добавить скам</a></div>';
+        }
+
+        function getLivePrice(coin, fallback) {
+            if (isScamCoin(coin)) return 0;
+            var manual = getManualEntry(coin);
+            if (manual && typeof manual.price === 'number' && !isNaN(manual.price)) {
+                return manual.price;
+            }
+            var p = getLivePriceFromMap(coin);
+            return (typeof p === 'number' && !isNaN(p)) ? p : fallback;
+        }
+
+        function isLivePriceAvailable(coin) {
+            if (isScamCoin(coin)) return true;
+            if (isManualPrice(coin)) return true;
+            var p = getLivePriceFromMap(coin);
+            return typeof p === 'number' && !isNaN(p);
+        }
+
+        function calculatePortfolio() {
+            var holdings = {};
+            var totalRealizedPnL = 0;
+            var sorted = transactions.slice().sort(function(a, b) {
+                return new Date(a.date) - new Date(b.date) || String(a.id).localeCompare(String(b.id));
+            });
+
+            for (var i = 0; i < sorted.length; i++) {
+                var tx = sorted[i];
+                var coin = tx.coin;
+                if (!holdings[coin]) {
+                    holdings[coin] = {
+                        amount: 0,
+                        totalBought: 0,
+                        totalSoldCash: 0,
+                        costBasis: 0,
+                        realizedPnL: 0,
+                        sold: 0,
+                        avgBuy: 0,
+                        isRecovered: false,
+                        isScam: false
+                    };
+                }
+                var h = holdings[coin];
+
+                if (tx.type === 'Покупка') {
+                    h.amount += tx.amount;
+                    h.totalBought += tx.total || (tx.price * tx.amount);
+                } else if (tx.type === 'Аирдроп') {
+                    h.amount += tx.amount;
+                } else if (tx.type === 'Скам') {
+                    h.amount += tx.amount || 1;
+                    h.totalBought += tx.total;
+                    h.isScam = true;
+                } else if (tx.type === 'Продажа') {
+                    h.amount -= tx.amount;
+                    h.totalSoldCash += tx.total;
+                    h.sold += tx.total;
+                    h.realizedPnL += tx.pnl || 0;
+                    totalRealizedPnL += tx.pnl;
+                }
+
+                if (h.amount <= 0.00000001) {
+                    h.amount = 0;
+                }
+
+                // Вложено = сколько своих денег ещё «в игре» (капитал не отбит продажами)
+                h.costBasis = h.amount > 0 ? Math.max(0, h.totalBought - h.totalSoldCash) : 0;
+                h.isRecovered = h.amount > 0 && h.costBasis <= 0.000001;
+                h.avgBuy = h.amount > 0 && h.costBasis > 0 ? h.costBasis / h.amount : 0;
+            }
+
+            globalHoldings = holdings;
+            return { holdings: holdings, totalRealizedPnL: totalRealizedPnL };
+        }
+
+        function getTotalValue(holdings) {
+            var total = 0;
+            Object.keys(holdings).forEach(function(c) {
+                if (holdings[c].amount > 0) {
+                    total += holdings[c].amount * getLivePrice(c, holdings[c].avgBuy);
+                }
+            });
+            return total;
+        }
+
+        function renderStats(portfolio) {
+            var holdings = portfolio.holdings;
+            var currentVal = 0, totalCost = 0;
+            Object.keys(holdings).forEach(function(c) {
+                var h = holdings[c];
+                if (h.amount > 0) {
+                    currentVal += h.amount * getLivePrice(c, h.avgBuy);
+                    totalCost += h.costBasis;
+                }
+            });
+            var pnl = currentVal - totalCost;
+            var pnlPct = totalCost > 0 ? (pnl / totalCost * 100) : (currentVal > 0 ? null : 0);
+
+            document.getElementById('totalBalance').textContent = formatMoney(currentVal);
+            document.getElementById('donutCenterValue').textContent = formatMoney(totalCost);
+
+            if (totalCost <= 0.000001 && currentVal > 0) {
+                document.getElementById('totalInvested').innerHTML =
+                    'Всего вложено: <strong style="color:var(--green)">' + formatMoney(0) + '</strong>' +
+                    ' <span style="color:var(--green);font-size:12px">· отбито</span>';
+            } else {
+                document.getElementById('totalInvested').innerHTML =
+                    'Всего вложено: <strong>' + formatMoney(totalCost) + '</strong>' +
+                    ' <span style="color:var(--text-muted);font-size:12px">· за вычетом продаж</span>';
+            }
+
+            document.getElementById('totalChange').innerHTML = pnl >= 0
+                ? '<span class="pnl-up">↑ ' + formatMoney(pnl) + ' нереализованный</span>'
+                : '<span class="pnl-down">↓ ' + formatMoney(Math.abs(pnl)) + ' нереализованный</span>';
+
+            document.getElementById('totalProfit').textContent = formatMoney(pnl);
+            document.getElementById('totalProfit').className = 'value ' + (pnl >= 0 ? 'pnl-up' : 'pnl-down');
+            document.getElementById('profitChange').innerHTML = pnlPct === null
+                ? '<span class="pnl-up">тело отбито · вся позиция = прибыль</span>'
+                : (pnlPct >= 0
+                    ? '<span class="pnl-up">↑ ' + pnlPct.toFixed(2) + '%</span>'
+                    : '<span class="pnl-down">↓ ' + Math.abs(pnlPct).toFixed(2) + '%</span>');
+
+            document.getElementById('totalLoss').textContent = formatMoney(portfolio.totalRealizedPnL);
+            document.getElementById('lossChange').textContent = portfolio.totalRealizedPnL >= 0 ? 'В плюсе' : 'В минусе';
+            document.getElementById('lossChange').style.color = portfolio.totalRealizedPnL >= 0 ? 'var(--green)' : 'var(--red)';
+        }
+
+        function generateColors(count) {
+            var colors = ['#2dd4bf', '#38bdf8', '#fb923c', '#a78bfa', '#4ade80', '#f472b6', '#fbbf24', '#f87171'];
+            var result = [];
+            for (var i = 0; i < count; i++) result.push(colors[i % colors.length]);
+            return result;
+        }
+
+        function renderLineChart(portfolio) {
+            var canvas = document.getElementById('lineChartCanvas');
+            if (!canvas) return;
+            var ctx = canvas.getContext('2d');
+            var sorted = transactions.slice().sort(function(a, b) { return new Date(a.date) - new Date(b.date); });
+            var labels = [], values = [], running = 0;
+
+            if (sorted.length === 0) {
+                labels = ['Старт', 'Сейчас'];
+                values = [0, 0];
+            } else {
+                sorted.forEach(function(tx) {
+                    if (tx.type === 'Покупка' || tx.type === 'Скам') running += tx.total;
+                    else if (tx.type === 'Продажа') running -= tx.total;
+                    labels.push(new Date(tx.date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }));
+                    values.push(Math.max(0, running));
+                });
+                var currentVal = getTotalValue(portfolio.holdings);
+                labels.push('Сейчас');
+                values.push(currentVal);
+            }
+
+            if (lineChartInstance) {
+                lineChartInstance.data.labels = labels;
+                lineChartInstance.data.datasets[0].data = values;
+                lineChartInstance.update();
+            } else {
+                var chartHeight = canvas.parentElement ? canvas.parentElement.clientHeight : 572;
+                var gradient = ctx.createLinearGradient(0, 0, 0, chartHeight);
+                gradient.addColorStop(0, 'rgba(45, 212, 191, 0.3)');
+                gradient.addColorStop(1, 'rgba(45, 212, 191, 0)');
+
+                lineChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: values,
+                            borderColor: '#2dd4bf',
+                            backgroundColor: gradient,
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 5,
+                            pointHoverBackgroundColor: '#2dd4bf'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#1a1a1a',
+                                borderColor: 'rgba(255,255,255,0.1)',
+                                borderWidth: 1,
+                                titleColor: '#fff',
+                                bodyColor: '#a1a1aa',
+                                callbacks: {
+                                    label: function(item) { return formatMoney(item.parsed.y); }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: { color: 'rgba(255,255,255,0.04)' },
+                                ticks: { color: '#71717a', font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
+                            },
+                            y: {
+                                grid: { color: 'rgba(255,255,255,0.04)' },
+                                ticks: {
+                                    color: '#71717a',
+                                    font: { size: 10 },
+                                    callback: function(v) { return '$' + v.toLocaleString(); }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        function renderDonutChart(chartData) {
+            var wrapper = document.getElementById('chartWrapper');
+            var empty = document.getElementById('allocationEmpty');
+            var legend = document.getElementById('allocationLegend');
+
+            if (chartData.labels.length === 0) {
+                wrapper.style.display = 'none';
+                empty.style.display = 'block';
+                legend.innerHTML = '';
+                if (myChartInstance) { myChartInstance.destroy(); myChartInstance = null; }
+                return;
+            }
+
+            wrapper.style.display = 'block';
+            empty.style.display = 'none';
+            var colors = generateColors(chartData.labels.length);
+            var ctx = document.getElementById('portfolioChart').getContext('2d');
+            var total = chartData.values.reduce(function(a, b) { return a + b; }, 0);
+
+            var legendHTML = '';
+            chartData.labels.forEach(function(lbl, i) {
+                var pct = total > 0 ? (chartData.values[i] / total * 100).toFixed(1) : 0;
+                var coinKey = chartData.coins && chartData.coins[i] ? chartData.coins[i] : null;
+                var itemClass = coinKey ? 'legend-item clickable' : 'legend-item';
+                var clickAttr = coinKey ? ' onclick="selectPortfolioChartCoin(\'' + jsEscape(coinKey) + '\')"' : '';
+                legendHTML += '<div class="' + itemClass + '"' + clickAttr + '><div class="legend-left"><div class="legend-dot" style="background:' + colors[i] + '"></div><span>' + lbl + '</span></div><span class="mono" style="font-size:11px;color:var(--text-muted)">' + formatMoney(chartData.values[i]) + ' · ' + pct + '%</span></div>';
+            });
+            legend.innerHTML = legendHTML;
+
+            if (myChartInstance) {
+                myChartInstance.data.labels = chartData.labels;
+                myChartInstance.data.datasets[0].data = chartData.values;
+                myChartInstance.data.datasets[0].backgroundColor = colors;
+                myChartInstance.update();
+            } else {
+                myChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: chartData.labels,
+                        datasets: [{
+                            data: chartData.values,
+                            backgroundColor: colors,
+                            borderWidth: 0,
+                            hoverOffset: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '72%',
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+        }
+
+        function renderPerfChart(portfolio) {
+            var ctx = document.getElementById('perfChartCanvas').getContext('2d');
+            var holdings = portfolio.holdings;
+            var coins = Object.keys(holdings).filter(function(c) { return holdings[c].amount > 0; });
+            var labels = [], values = [], colors = [];
+
+            coins.forEach(function(coin) {
+                var h = holdings[coin];
+                var price = getLivePrice(coin, h.avgBuy);
+                var pnlPct = h.avgBuy > 0 ? ((price - h.avgBuy) / h.avgBuy * 100) : 0;
+                labels.push(getCoinSymbol(coin) || getCoinName(coin));
+                values.push(Math.abs(pnlPct));
+                colors.push(pnlPct >= 0 ? '#4ade80' : '#f87171');
+            });
+
+            if (perfChartInstance) {
+                perfChartInstance.data.labels = labels;
+                perfChartInstance.data.datasets[0].data = values;
+                perfChartInstance.data.datasets[0].backgroundColor = colors;
+                perfChartInstance.update();
+            } else {
+                perfChartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels.length ? labels : ['—'],
+                        datasets: [{
+                            data: values.length ? values : [0],
+                            backgroundColor: colors.length ? colors : ['#333'],
+                            borderRadius: 6,
+                            barThickness: 16
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 } } },
+                            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#71717a', font: { size: 10 },
+                                callback: function(v) { return v + '%'; } } }
+                        }
+                    }
+                });
+            }
+        }
+
+        function renderPortfolio(portfolio) {
+            var holdings = portfolio.holdings;
+            var tbody = document.getElementById('portfolioList');
+            var activeCoins = Object.keys(holdings).filter(function(c) { return holdings[c].amount > 0; });
+
+            if (activeCoins.length === 0) {
+                lastPortfolioHTML = '';
+                tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">◈</div><h3>Позиций пока нет</h3><p>Добавьте первую сделку</p></div></td></tr>';
+                renderDonutChart({ labels: [], values: [] });
+                return;
+            }
+
+            var chartLabels = [], chartValues = [], chartCoins = [], html = '';
+            var colors = generateColors(activeCoins.length);
+
+            activeCoins.forEach(function(coin, idx) {
+                var h = holdings[coin];
+                var currentPrice = getCurrentPrice(coin);
+                var price = currentPrice !== null ? currentPrice : h.avgBuy;
+                var posVal = h.amount * price;
+                var invested = h.costBasis;
+                var pnlPct = !h.isRecovered && h.avgBuy > 0 && currentPrice !== null
+                    ? ((currentPrice - h.avgBuy) / h.avgBuy * 100) : null;
+                var sparkSign = pnlPct === null ? '' : (pnlPct >= 0 ? '↑' : '↓');
+                var color = colors[idx];
+
+                if (invested > 0.000001) {
+                    chartLabels.push(getCoinSymbol(coin) || getCoinName(coin));
+                    chartValues.push(invested);
+                    chartCoins.push(coin);
+                }
+
+                var avgBuyHtml = h.isScam
+                    ? '<span style="color:var(--red);font-weight:600">скам</span>'
+                    : (h.isRecovered
+                        ? '<span style="color:var(--green);font-weight:600">отбито</span>'
+                        : formatPrice(h.avgBuy));
+                var investedHtml = h.isRecovered && !h.isScam
+                    ? '<span class="mono" style="font-weight:500;color:var(--green)">' + formatMoney(0) + '<span class="recovered-tag">отбито</span></span>'
+                    : '<span class="mono" style="font-weight:500;color:var(--text-secondary)">' + formatMoney(invested) + '</span>';
+                var unrealizedPnL = h.isScam ? -invested : (h.isRecovered ? posVal : (posVal - invested));
+                var pnlHtml = '';
+
+                if (h.isScam) {
+                    pnlHtml = '<div class="pnl-cell">' +
+                        '<div class="pnl-cell-amount pnl-down">-' + formatMoney(invested) + '</div>' +
+                        '<div class="pnl-cell-pct down">↓ 100%</div>' +
+                        '<div class="pnl-cell-sub">потеря</div></div>';
+                } else if (h.isRecovered) {
+                    pnlHtml = '<div class="pnl-cell">' +
+                        '<div class="pnl-cell-amount pnl-up">+' + formatMoney(unrealizedPnL) + '</div>' +
+                        '<div class="pnl-cell-sub">нереализ.</div>';
+                    if (h.realizedPnL > 0) {
+                        pnlHtml += '<div class="pnl-cell-sub realized">+' + formatMoney(h.realizedPnL) + ' реализ.</div>';
+                    }
+                    pnlHtml += '</div>';
+                } else if (currentPrice !== null && pnlPct !== null) {
+                    var pctClass = unrealizedPnL >= 0 ? 'up' : 'down';
+                    pnlHtml = '<div class="pnl-cell">' +
+                        '<div class="pnl-cell-amount ' + (unrealizedPnL >= 0 ? 'pnl-up' : 'pnl-down') + '">' +
+                        (unrealizedPnL >= 0 ? '+' : '') + formatMoney(unrealizedPnL) + '</div>' +
+                        '<div class="pnl-cell-pct ' + pctClass + '">' + sparkSign + ' ' + Math.abs(pnlPct).toFixed(2) + '%</div>';
+                    if (h.realizedPnL > 0) {
+                        pnlHtml += '<div class="pnl-cell-sub realized">+' + formatMoney(h.realizedPnL) + ' реализ.</div>';
+                    }
+                    pnlHtml += '</div>';
+                } else {
+                    pnlHtml = '<span class="spark">—</span>';
+                }
+
+                var sym = getCoinSymbol(coin);
+                var ucid = getCoinUcid(coin);
+                var subParts = [];
+                if (sym) subParts.push(sym);
+                if (ucid) subParts.push('UCID ' + ucid);
+                else if (!isCoinNameResolved(coin) && isNumericId(coin)) subParts.push('UCID ' + normalizeCoinKey(coin));
+                if (h.isScam) subParts.push('скам · ' + formatMoney(invested) + ' вложено');
+                else subParts.push(formatNumber(h.amount) + ' шт');
+                var displayName = getCoinName(coin);
+
+                html += '<tr>' +
+                    '<td><div class="coin-cell-row">' +
+                        '<div class="coin-cell-main" onclick="selectPortfolioChartCoin(\'' + jsEscape(coin) + '\')" title="График ' + displayName + '">' +
+                            '<div class="coin-avatar" style="background:linear-gradient(135deg,' + color + ',#38bdf8)">' + getCoinAvatar(coin) + '</div>' +
+                            '<div><div class="coin-name">' + displayName + '</div>' +
+                            '<div class="coin-sub mono">' + subParts.join(' · ') + '</div></div>' +
+                        '</div>' +
+                        '<button type="button" class="coin-action-btn" onclick="event.stopPropagation();openModal(\'' + jsEscape(coin) + '\')" title="Новая сделка">+</button>' +
+                    '</div></td>' +
+                    '<td data-label="Текущая цена">' + formatCurrentPrice(coin) + '</td>' +
+                    '<td data-label="Ср. вход"><div class="mono" style="font-weight:500">' + avgBuyHtml + '</div></td>' +
+                    '<td data-label="Вложено">' + investedHtml + '</td>' +
+                    '<td data-label="Позиция" class="mono" style="font-weight:600">' + formatMoney(posVal) + '</td>' +
+                    '<td data-label="P&L">' + pnlHtml + '</td>' +
+                '</tr>';
+            });
+
+            lastPortfolioHTML = html;
+            tbody.innerHTML = html;
+            renderDonutChart({ labels: chartLabels, values: chartValues, coins: chartCoins });
+        }
+
+        function renderRisk(portfolio) {
+            var holdings = portfolio.holdings;
+            var activeCoins = Object.keys(holdings).filter(function(c) { return holdings[c].amount > 0; });
+
+            if (activeCoins.length === 0) {
+                document.getElementById('riskFill').style.width = '0%';
+                document.getElementById('riskLevel').textContent = 'Низкий';
+                document.getElementById('riskVolatility').textContent = '0';
+                document.getElementById('riskConcentration').textContent = '0%';
+                document.getElementById('riskDiversification').textContent = '0';
+                document.getElementById('riskDesc').textContent = '—';
+                return;
+            }
+
+            var totalVal = 0, maxVal = 0;
+            activeCoins.forEach(function(c) {
+                var val = holdings[c].amount * getLivePrice(c, holdings[c].avgBuy);
+                totalVal += val;
+                if (val > maxVal) maxVal = val;
+            });
+
+            var concentration = totalVal > 0 ? (maxVal / totalVal * 100) : 0;
+            var score = 30;
+            if (activeCoins.length <= 2) score += 40;
+            if (concentration > 50) score += 20;
+            score = Math.min(100, score);
+
+            document.getElementById('riskFill').style.width = score + '%';
+            var level = score < 45 ? 'Низкий' : (score < 75 ? 'Средний' : 'Высокий');
+            var color = score < 45 ? 'var(--green)' : (score < 75 ? 'var(--orange)' : 'var(--red)');
+
+            document.getElementById('riskLevel').textContent = level;
+            document.getElementById('riskLevel').style.color = color;
+            document.getElementById('riskVolatility').textContent = score + '/100';
+            document.getElementById('riskConcentration').textContent = Math.round(concentration) + '%';
+            document.getElementById('riskDiversification').textContent = activeCoins.length;
+            document.getElementById('riskDesc').textContent = activeCoins.length > 3 ? 'Хорошая диверсификация' : 'Низкая диверсификация';
+        }
+
+        function renderTable() {
+            var tbody = document.getElementById('transactionsTable');
+            if (transactions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state" style="padding:32px;"><div class="icon">☰</div><h3>Нет сделок</h3></div></td></tr>';
+                return;
+            }
+
+            var sorted = transactions.slice().sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+            var html = '';
+            sorted.forEach(function(tx) {
+                var badge, label;
+                if (tx.type === 'Покупка') { badge = 'badge-buy'; label = 'Покупка'; }
+                else if (tx.type === 'Аирдроп') { badge = 'badge-airdrop'; label = 'Аирдроп'; }
+                else if (tx.type === 'Скам') { badge = 'badge-scam'; label = 'Скам'; }
+                else { badge = 'badge-sell'; label = 'Продажа'; }
+                var pnl = tx.pnl || 0;
+                var pnlClass = pnl >= 0 ? 'pnl-up' : 'pnl-down';
+                var pnlText = tx.type === 'Продажа' ? formatMoney(pnl) : '—';
+                var priceText = tx.type === 'Аирдроп' ? 'Бесплатно' : (tx.type === 'Скам' ? '$0' : formatPrice(tx.price));
+                var totalText = tx.type === 'Аирдроп' ? '—' : formatMoney(tx.total);
+                var amountText = tx.type === 'Скам' ? '—' : formatNumber(tx.amount, 5);
+
+                html += '<tr>' +
+                    '<td><div class="coin-cell"><div class="coin-avatar">' + getCoinAvatar(tx.coin) + '</div><div><div class="coin-name">' + getCoinName(tx.coin) + '</div>' +
+                    '<div class="coin-sub mono">' + getCoinPickerSub(tx.coin) + '</div></div></div></td>' +
+                    '<td data-label="Тип"><span class="badge ' + badge + '">' + label + '</span></td>' +
+                    '<td data-label="Кол-во" class="mono">' + amountText + '</td>' +
+                    '<td data-label="Цена" class="mono">' + priceText + '</td>' +
+                    '<td data-label="Сумма" class="mono">' + totalText + '</td>' +
+                    '<td data-label="Дата" style="color:var(--text-secondary)">' + new Date(tx.date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', year: 'numeric' }) + '</td>' +
+                    '<td data-label="P&L" class="' + pnlClass + ' mono">' + pnlText + '</td>' +
+                    '<td data-label="" class="mob-actions"><button class="btn btn-danger" onclick="deleteTransaction(\'' + tx.id + '\')">✕</button></td>' +
+                '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        function renderAll() {
+            var portfolio = calculatePortfolio();
+            renderStats(portfolio);
+            updatePortfolioChartSection(portfolio.holdings);
+            renderLineChart(portfolio);
+            renderPortfolio(portfolio);
+            renderRisk(portfolio);
+            renderPerfChart(portfolio);
+            renderTable();
+        }
+
+        loadSetupInfo();
+        loadTvSymbolOverrides();
+        renderTvSymbolOverridesList();
+        refreshData();
+
+        (function initMobileLayout() {
+            function updateMobileLayout() {
+                var w = window.innerWidth;
+                var ua = navigator.userAgent || '';
+                var touch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+                var mobileUa = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua);
+                var mobile = w <= 900 || mobileUa || (touch && w < 1100);
+                document.documentElement.classList.toggle('mobile-layout', mobile);
+                document.documentElement.classList.toggle('narrow', w <= 380);
+            }
+            updateMobileLayout();
+            window.addEventListener('resize', updateMobileLayout);
+            window.addEventListener('orientationchange', updateMobileLayout);
+        })();
+
+        (function initMobileNavObserver() {
+            var sections = ['home', 'positions', 'history'];
+            if (!('IntersectionObserver' in window)) return;
+            var observer = new IntersectionObserver(function(entries) {
+                var visible = entries.filter(function(e) { return e.isIntersecting; })
+                    .sort(function(a, b) { return b.intersectionRatio - a.intersectionRatio; });
+                if (visible.length) setActiveNav(visible[0].target.id);
+            }, { rootMargin: '-30% 0px -55% 0px', threshold: [0, 0.15, 0.4] });
+            sections.forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) observer.observe(el);
+            });
+        })();
+    </script>
+</body>
+</html>
