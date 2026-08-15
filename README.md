@@ -91,22 +91,6 @@
 
 ---
 
-## Публикация на GitHub (для maintainer)
-
-```bash
-cd Crypto
-git init
-git add Code.gs index.html README.md .gitignore
-git commit -m "Initial release: Vault crypto portfolio"
-git branch -M main
-git remote add origin https://github.com/YOUR_USER/vault-crypto-portfolio.git
-git push -u origin main
-```
-
-Репозиторий на GitHub создайте через [github.com/new](https://github.com/new) (можно Public).
-
----
-
 ## Структура проекта
 
 | Файл | Назначение |

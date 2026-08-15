@@ -3270,6 +3270,11 @@
             var oldBe = h.isRecovered ? 0 : calcBreakevenPct(refPrice, h.avgBuy);
             var newBe = calcBreakevenPct(refPrice, newAvgBuy);
 
+            var totalPortfolioCost = snap.totalPortfolioCost || 0;
+            var oldAllocPct = totalPortfolioCost > 0 ? (h.costBasis / totalPortfolioCost * 100) : null;
+            var newTotalPortfolioCost = totalPortfolioCost + addUsd;
+            var newAllocPct = newTotalPortfolioCost > 0 ? (newCostBasis / newTotalPortfolioCost * 100) : null;
+
             var html = '<div class="sim-row"><span>Новая точка входа</span><strong>' + formatPrice(newAvgBuy) + '</strong></div>';
             html += '<div class="sim-row"><span>Было → станет (вход)</span><strong>' +
                 (h.isRecovered || !h.avgBuy ? '—' : formatPrice(h.avgBuy)) + ' → ' + formatPrice(newAvgBuy) + '</strong></div>';
@@ -3280,6 +3285,9 @@
                 (oldBe === null ? '—' : (oldBe === 0 ? '0%' : '+' + oldBe.toFixed(2) + '%')) +
                 ' → ' + (newBe === 0 ? '0%' : '+' + newBe.toFixed(2) + '%') + '</strong></div>';
             html += '<div class="sim-row"><span>Монет после докупки</span><strong>' + formatNumber(newAmount, 4) + '</strong></div>';
+            html += '<div class="sim-row"><span>Аллокация в портфеле</span><strong>' +
+                (oldAllocPct === null ? '—' : oldAllocPct.toFixed(1) + '%') +
+                ' → ' + (newAllocPct === null ? '—' : newAllocPct.toFixed(1) + '%') + '</strong></div>';
 
             resultEl.innerHTML = html;
         }
