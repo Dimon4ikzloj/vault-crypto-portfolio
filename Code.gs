@@ -34,10 +34,104 @@ const DEFAULT_COINS = [
 ];
 
 function doGet(e) {
+  const page = e && e.parameter ? e.parameter.page : '';
+
+  if (page === 'manifest') {
+    return serveWebManifest();
+  }
+  if (page === 'sw') {
+    return serveServiceWorker();
+  }
+  if (page === 'icon') {
+    return servePwaIcon();
+  }
+
   return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('Vault — Крипто Портфель')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function getWebAppExecUrl() {
+  try {
+    return ScriptApp.getService().getUrl();
+  } catch (err) {
+    return '';
+  }
+}
+
+function getWebAppScopeUrl() {
+  const execUrl = getWebAppExecUrl();
+  if (!execUrl) return '';
+  const match = execUrl.match(/^(https:\/\/script\.google\.com\/macros\/s\/[^/]+\/)/);
+  return match ? match[1] : execUrl;
+}
+
+function getPwaIconSvg() {
+  return [
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">',
+    '<rect width="512" height="512" rx="112" fill="#0a0a0a"/>',
+    '<rect x="48" y="48" width="416" height="416" rx="88" fill="none" stroke="#2dd4bf" stroke-width="12" opacity="0.35"/>',
+    '<text x="256" y="310" text-anchor="middle" font-family="Arial,sans-serif" font-size="220" font-weight="700" fill="#2dd4bf">V</text>',
+    '</svg>'
+  ].join('');
+}
+
+function getPwaIconDataUri() {
+  return 'data:image/svg+xml;base64,' + Utilities.base64Encode(getPwaIconSvg());
+}
+
+function serveWebManifest() {
+  const execUrl = getWebAppExecUrl();
+  const scopeUrl = getWebAppScopeUrl() || execUrl;
+  const iconDataUri = getPwaIconDataUri();
+
+  // ВАЖНО: иконки заданы как data:-URI (base64), а не как ссылка на "?page=icon".
+  // ContentService в Apps Script не умеет отдавать произвольный MIME-тип (только
+  // фиксированный enum ATOM/CSV/JSON/TEXT/XML/...), поэтому "?page=icon" всегда
+  // приходил бы с неверным Content-Type и Chrome не мог распознать его как картинку.
+  // Из-за этого манифест не проходил проверку installability (нужны иконки 192px и 512px).
+  const manifest = {
+    name: 'Vault — Крипто Портфель',
+    short_name: 'Vault',
+    description: 'Учёт крипто-портфеля: сделки, цены CMC, графики',
+    start_url: execUrl || './',
+    scope: scopeUrl || './',
+    id: execUrl || './',
+    display: 'standalone',
+    display_override: ['standalone', 'window-controls-overlay', 'browser'],
+    background_color: '#0a0a0a',
+    theme_color: '#0a0a0a',
+    orientation: 'any',
+    lang: 'ru',
+    categories: ['finance', 'utilities'],
+    icons: [
+      { src: iconDataUri, sizes: '192x192 512x512', type: 'image/svg+xml', purpose: 'any' },
+      { src: iconDataUri, sizes: '192x192 512x512', type: 'image/svg+xml', purpose: 'maskable' }
+    ]
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(manifest))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function serveServiceWorker() {
+  const sw = [
+    "self.addEventListener('install', function(e) { self.skipWaiting(); });",
+    "self.addEventListener('activate', function(e) { e.waitUntil(self.clients.claim()); });",
+    "self.addEventListener('fetch', function(e) {",
+    "  if (e.request.method !== 'GET') return;",
+    "  e.respondWith(fetch(e.request));",
+    "});"
+  ].join('\n');
+
+  return ContentService.createTextOutput(sw)
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
+function servePwaIcon() {
+  return ContentService.createTextOutput(getPwaIconSvg())
+    .setMimeType(ContentService.MimeType.XML);
 }
 
 /**

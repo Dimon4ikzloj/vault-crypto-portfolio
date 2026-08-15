@@ -18,7 +18,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Vault">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Vault">
     <meta name="theme-color" content="#0a0a0a">
+    <link rel="manifest" href="?page=manifest">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%230a0a0a'/%3E%3Crect x='48' y='48' width='416' height='416' rx='88' fill='none' stroke='%232dd4bf' stroke-width='12' opacity='0.35'/%3E%3Ctext x='256' y='310' text-anchor='middle' font-family='Arial,sans-serif' font-size='220' font-weight='700' fill='%232dd4bf'%3EV%3C/text%3E%3C/svg%3E">
     <title>Vault — Крипто Портфель</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -482,6 +487,23 @@
         }
 
         .tv-override-item button:hover { color: var(--red); }
+
+        .pwa-install-block {
+            padding-bottom: 16px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pwa-install-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.55;
+            margin: 8px 0 0;
+        }
+
+        html.standalone-mode .mobile-bottom-nav {
+            padding-bottom: calc(8px + env(safe-area-inset-bottom));
+        }
 
         .mini-stats {
             display: grid;
@@ -1809,7 +1831,8 @@
         html.mobile-layout .modal-chart {
             max-width: none;
             width: 100%;
-            height: 100%;
+            height: 100dvh;
+            max-height: 100dvh;
             border-radius: 0;
             border: none;
         }
@@ -1817,24 +1840,100 @@
         html.mobile-layout #chartModal.modal-overlay {
             padding: 0;
             align-items: stretch;
+            height: 100dvh;
         }
 
         html.mobile-layout .chart-modal-body {
+            flex: 1;
+            min-height: 0;
             padding-bottom: env(safe-area-inset-bottom);
         }
 
         html.mobile-layout .chart-modal-layout {
+            position: relative;
+            flex: 1;
+            min-height: 0;
             flex-direction: column;
+            overflow: hidden;
         }
 
+        /* Панель статистики — плавающая "шторка" поверх графика, чтобы сам график
+           всегда оставался полного (постоянного) размера и не сжимался при открытии. */
         html.mobile-layout .chart-coin-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
             width: 100%;
-            max-height: 42vh;
+            max-height: 62vh;
+            z-index: 5;
+            background: var(--bg-card, #161616);
             border-right: none;
-            border-bottom: 1px solid var(--border);
+            border-top: 1px solid var(--border);
+            border-bottom: none;
+            border-radius: 16px 16px 0 0;
+            box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.45);
+            transition: max-height 0.22s ease, padding 0.22s ease;
         }
 
-        html.mobile-layout .tv-chart-container { min-height: 280px; }
+        html.mobile-layout .chart-coin-panel.collapsed {
+            max-height: 46px;
+            padding-top: 0;
+            padding-bottom: 0;
+            overflow: hidden;
+        }
+
+        .chart-panel-toggle {
+            display: none;
+        }
+
+        html.mobile-layout .chart-panel-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            flex-shrink: 0;
+            height: 46px;
+            margin: 0 -16px;
+            padding: 0 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .chart-panel-toggle .chart-panel-toggle-icon {
+            font-size: 11px;
+            color: var(--cyan);
+            transition: transform 0.22s ease;
+        }
+
+        html.mobile-layout .chart-coin-panel.collapsed .chart-panel-toggle .chart-panel-toggle-icon {
+            transform: rotate(-90deg);
+        }
+
+        html.mobile-layout .chart-panel-toggle-body {
+            overflow-y: auto;
+            max-height: calc(62vh - 46px);
+        }
+
+        html.mobile-layout .chart-coin-panel.collapsed .chart-panel-toggle-body {
+            display: none;
+        }
+
+        html.mobile-layout .tv-chart-container {
+            width: 100%;
+            height: 100%;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        html.mobile-layout #chart_tv_chart.tv-chart-container {
+            min-height: 0;
+        }
 
         @media (max-width: 900px) {
             .sidebar { display: none; }
@@ -1879,6 +1978,7 @@
             <header class="topbar">
                 <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span> <span>Портфель</span><span class="mobile-only" style="margin-left:6px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span></div>
                 <div class="topbar-right">
+                    <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
                     <button class="btn btn-outline btn-sm mobile-only" onclick="syncPrices()" title="Синхронизировать">⟳</button>
                     <div class="search-box desktop-only">
                         <span style="color:var(--text-muted)">⌕</span>
@@ -2135,6 +2235,18 @@
                                 <div class="card-title">Трекер активов</div>
                             </div>
                             <div class="card-body-pad">
+                                <div class="form-group pwa-install-block">
+                                    <label class="form-label">Установить как приложение</label>
+                                    <p class="pwa-install-hint">Добавьте Vault на главный экран — откроется без вкладок браузера, как отдельное приложение.</p>
+                                    <button type="button" class="btn btn-primary btn-sm" id="pwaInstallBtn" style="display:none;margin-top:10px;" onclick="installPwaApp()">⬇ Установить приложение</button>
+                                    <p class="pwa-install-hint" id="pwaStandaloneHint" style="display:none;color:var(--green);">✓ Запущено как приложение</p>
+                                    <p class="pwa-install-hint" id="pwaIosHint" style="display:none;margin-top:8px;">
+                                        <strong>iPhone / iPad:</strong> Safari → Поделиться ↗ → <strong>На экран «Домой»</strong>
+                                    </p>
+                                    <p class="pwa-install-hint" id="pwaAndroidHint" style="display:none;margin-top:8px;">
+                                        <strong>Android:</strong> меню браузера (⋮) → <strong>Установить приложение</strong> или кнопка выше
+                                    </p>
+                                </div>
                                 <div class="form-group">
                                     <label class="form-label">Символ или UCID</label>
                                     <div style="display:flex;gap:8px;">
@@ -2315,7 +2427,12 @@
             </div>
             <div class="modal-body chart-modal-body">
                 <div class="chart-modal-layout">
-                    <aside class="chart-coin-panel" id="chartCoinPanel">
+                    <aside class="chart-coin-panel collapsed" id="chartCoinPanel">
+                        <div class="chart-panel-toggle" id="chartPanelToggle" onclick="toggleChartInfoPanel()">
+                            <span>Статистика и докупка</span>
+                            <span class="chart-panel-toggle-icon" id="chartPanelToggleIcon">▾</span>
+                        </div>
+                        <div class="chart-panel-toggle-body">
                         <div class="chart-coin-stat">
                             <span class="lbl">Вложено</span>
                             <span class="val" id="chartCoinInvested">—</span>
@@ -2349,6 +2466,7 @@
                             </div>
                             <button type="button" class="btn btn-outline btn-sm" onclick="fillChartSimCurrentPrice()">Подставить текущую цену</button>
                             <div class="chart-sim-result" id="chartSimResult">Укажите сумму и цену — покажем новую точку входа и % до безубытка.</div>
+                        </div>
                         </div>
                     </aside>
                     <div id="chart_tv_chart" class="tv-chart-container"></div>
@@ -3179,6 +3297,14 @@
             document.body.classList.remove('modal-open');
         }
 
+        function toggleChartInfoPanel() {
+            var panel = document.getElementById('chartCoinPanel');
+            var icon = document.getElementById('chartPanelToggleIcon');
+            if (!panel) return;
+            var collapsed = panel.classList.toggle('collapsed');
+            if (icon) icon.textContent = collapsed ? '▾' : '▴';
+        }
+
         function updatePortfolioChartSection(holdings) {
             var coins = getActivePortfolioCoins(holdings);
             var coinsKey = coins.join(',');
@@ -3522,6 +3648,99 @@
                     }
                 })
                 .getSetupInfo();
+        }
+
+        var deferredPwaPrompt = null;
+
+        function isStandalonePwa() {
+            return window.matchMedia('(display-mode: standalone)').matches ||
+                window.matchMedia('(display-mode: fullscreen)').matches ||
+                window.navigator.standalone === true;
+        }
+
+        function showPwaInstallButtons(show) {
+            ['pwaInstallBtn', 'pwaInstallBtnTop'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) el.style.display = show ? '' : 'none';
+            });
+        }
+
+        function updatePwaInstallUi() {
+            var standaloneHint = document.getElementById('pwaStandaloneHint');
+            var iosHint = document.getElementById('pwaIosHint');
+            var androidHint = document.getElementById('pwaAndroidHint');
+            var ua = navigator.userAgent || '';
+            var isIos = /iPhone|iPad|iPod/i.test(ua);
+            var isAndroid = /Android/i.test(ua);
+
+            if (isStandalonePwa()) {
+                document.documentElement.classList.add('standalone-mode');
+                showPwaInstallButtons(false);
+                if (standaloneHint) standaloneHint.style.display = 'block';
+                if (iosHint) iosHint.style.display = 'none';
+                if (androidHint) androidHint.style.display = 'none';
+                return;
+            }
+
+            if (standaloneHint) standaloneHint.style.display = 'none';
+            if (iosHint) iosHint.style.display = isIos ? 'block' : 'none';
+            if (androidHint) androidHint.style.display = isAndroid ? 'block' : 'none';
+            showPwaInstallButtons(!!deferredPwaPrompt);
+        }
+
+        function installPwaApp() {
+            if (deferredPwaPrompt) {
+                deferredPwaPrompt.prompt();
+                deferredPwaPrompt.userChoice.then(function(choice) {
+                    deferredPwaPrompt = null;
+                    updatePwaInstallUi();
+                    if (choice.outcome === 'accepted') {
+                        showToast('Приложение установлено', 'success');
+                    }
+                });
+                return;
+            }
+            var isIos = /iPhone|iPad|iPod/i.test(navigator.userAgent || '');
+            if (isIos) {
+                showToast('Safari → Поделиться → На экран «Домой»', 'success');
+                scrollToSection('settingsPanel');
+            } else {
+                showToast('Меню браузера → «Установить приложение»', 'success');
+                scrollToSection('settingsPanel');
+            }
+        }
+
+        function registerPwaServiceWorker() {
+            if (!('serviceWorker' in navigator)) return;
+            try {
+                // Apps Script всегда отдаёт контент через редирект на googleusercontent.com,
+                // а браузеры запрещают регистрировать Service Worker, чей скрипт пришёл через
+                // редирект ("SecurityError: script resource is behind a redirect"). Поэтому
+                // регистрация здесь неизбежно завершится ошибкой — это ограничение платформы
+                // Apps Script, а не баг. Современный Chrome/Edge (108+/112+) не требуют
+                // активный Service Worker для показа пункта «Установить приложение», так что
+                // на установку это не влияет — просто офлайн-кеширования не будет.
+                var scopePath = window.location.pathname || '/';
+                navigator.serviceWorker.register(scopePath + '?page=sw', { scope: scopePath })
+                    .catch(function() {});
+            } catch (e) {}
+        }
+
+        function initPwaInstall() {
+            registerPwaServiceWorker();
+            updatePwaInstallUi();
+
+            window.addEventListener('beforeinstallprompt', function(e) {
+                e.preventDefault();
+                deferredPwaPrompt = e;
+                updatePwaInstallUi();
+            });
+
+            window.addEventListener('appinstalled', function() {
+                deferredPwaPrompt = null;
+                updatePwaInstallUi();
+                showToast('Vault добавлен на главный экран', 'success');
+            });
         }
 
         function runDiagnostics() {
@@ -4296,6 +4515,7 @@
         loadSetupInfo();
         loadTvSymbolOverrides();
         renderTvSymbolOverridesList();
+        initPwaInstall();
         refreshData();
 
         (function initMobileLayout() {
