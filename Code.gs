@@ -2472,11 +2472,224 @@ function updateAllCoins() {
     } else {
       props.deleteProperty('LAST_TRIGGER_TV_WARNING');
     }
+
+    try {
+      checkPriceAlerts();
+    } catch (alertErr) {
+      Logger.log('checkPriceAlerts failed: ' + alertErr);
+    }
+
     return result;
   } catch (e) {
     props.setProperty('LAST_TRIGGER_ERROR', formatApiError(e));
     throw e;
   }
+}
+
+/**
+ * ─── Уведомления по цене (% от точки входа) ───
+ * Идут по email (MailApp), а не push-уведомлениями: Apps Script не может
+ * держать рабочий Service Worker (см. регистрацию в index.html), поэтому
+ * настоящие push-уведомления, приходящие при закрытом приложении, здесь
+ * технически невозможны. Проверка идёт из updateAllCoins() — это почасовой
+ * серверный триггер, который срабатывает сам по себе, без открытого браузера.
+ */
+const PRICE_ALERTS_PROP = 'PRICE_ALERTS_LIST';
+const ALERT_EMAIL_PROP = 'PRICE_ALERT_EMAIL';
+
+function getPriceAlerts() {
+  const saved = PropertiesService.getUserProperties().getProperty(PRICE_ALERTS_PROP);
+  if (!saved) return [];
+  try {
+    const parsed = JSON.parse(saved);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePriceAlerts_(list) {
+  PropertiesService.getUserProperties().setProperty(PRICE_ALERTS_PROP, JSON.stringify(list));
+}
+
+function getAlertEmail() {
+  const saved = PropertiesService.getUserProperties().getProperty(ALERT_EMAIL_PROP);
+  if (saved) return saved;
+  try {
+    const active = Session.getActiveUser().getEmail();
+    if (active) return active;
+  } catch (e) {}
+  try {
+    return Session.getEffectiveUser().getEmail() || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function saveAlertEmail(email) {
+  const clean = String(email || '').trim();
+  if (clean && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+    return { success: false, error: 'Некорректный email' };
+  }
+  PropertiesService.getUserProperties().setProperty(ALERT_EMAIL_PROP, clean);
+  return { success: true, email: clean };
+}
+
+function addPriceAlert(coin, thresholdPct) {
+  const coinFormatted = normalizeCoinKey(coin);
+  const pct = parseFloat(thresholdPct);
+
+  if (!coinFormatted) return { success: false, error: 'Укажите монету' };
+  if (!isFinite(pct) || pct === 0) {
+    return { success: false, error: 'Укажите ненулевой процент (например, 20 для роста или -10 для падения)' };
+  }
+
+  const list = getPriceAlerts();
+  const alert = {
+    id: String(Date.now()) + '-' + Math.floor(Math.random() * 1000),
+    coin: coinFormatted,
+    thresholdPct: pct,
+    enabled: true,
+    triggered: false,
+    createdAt: Date.now(),
+    triggeredAt: null
+  };
+  list.unshift(alert);
+  savePriceAlerts_(list);
+  return { success: true, alerts: list };
+}
+
+function deletePriceAlert(id) {
+  const list = getPriceAlerts().filter(function(a) { return String(a.id) !== String(id); });
+  savePriceAlerts_(list);
+  return { success: true, alerts: list };
+}
+
+function resetPriceAlert(id) {
+  const list = getPriceAlerts().map(function(a) {
+    if (String(a.id) === String(id)) {
+      a.triggered = false;
+      a.triggeredAt = null;
+    }
+    return a;
+  });
+  savePriceAlerts_(list);
+  return { success: true, alerts: list };
+}
+
+/**
+ * Считает текущий остаток и точку входа по каждой монете тем же гибридным
+ * методом (усреднённая цена покупки + сброс в 0 при полном отбитии капитала),
+ * что и клиентский calculatePortfolio() в index.html. Нужен отдельно здесь,
+ * потому что проверка алертов идёт по серверному триггеру, без открытого
+ * браузера — клиентский расчёт в этот момент недоступен.
+ */
+function computeHoldingsSnapshot_() {
+  const info = getDealsSheet(false);
+  if (!info.sheet) return {};
+
+  const parsed = readTransactionsFromSheet(info.sheet);
+  const sorted = parsed.transactions.slice().sort(function(a, b) {
+    const da = new Date(a.date).getTime();
+    const db = new Date(b.date).getTime();
+    if (da !== db) return da - db;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  const holdings = {};
+
+  sorted.forEach(function(tx) {
+    if (!holdings[tx.coin]) {
+      holdings[tx.coin] = { amount: 0, totalBought: 0, totalSoldCash: 0, costBasis: 0, avgBuy: 0 };
+    }
+    const h = holdings[tx.coin];
+
+    if (tx.type === 'Покупка') {
+      const cost = tx.total || (tx.price * tx.amount);
+      h.amount += tx.amount;
+      h.totalBought += cost;
+      h.costBasis += cost;
+    } else if (tx.type === 'Аирдроп') {
+      h.amount += tx.amount;
+    } else if (tx.type === 'Скам') {
+      h.amount += tx.amount || 1;
+      h.totalBought += tx.total;
+      h.costBasis += tx.total;
+    } else if (tx.type === 'Продажа') {
+      const avgBeforeSale = h.amount > 0 ? h.costBasis / h.amount : 0;
+      const soldAmount = Math.min(tx.amount, h.amount);
+      const costRemoved = avgBeforeSale * soldAmount;
+      h.amount -= tx.amount;
+      h.costBasis = Math.max(0, h.costBasis - costRemoved);
+      h.totalSoldCash += tx.total;
+    }
+
+    if (h.amount <= 0.00000001) h.amount = 0;
+
+    if (h.totalBought > 0 && h.totalSoldCash >= h.totalBought - 0.000001) {
+      h.costBasis = 0;
+    }
+
+    h.avgBuy = h.amount > 0 && h.costBasis > 0 ? h.costBasis / h.amount : 0;
+  });
+
+  return holdings;
+}
+
+/**
+ * Вызывается из updateAllCoins() каждый час. Для каждого включённого и ещё не
+ * сработавшего алерта сравнивает текущий % изменения цены от точки входа с
+ * порогом; при достижении — шлёт письмо и помечает алерт сработавшим
+ * (одноразово, чтобы не слать письмо на каждый час подряд).
+ */
+function checkPriceAlerts() {
+  const alerts = getPriceAlerts();
+  const active = alerts.filter(function(a) { return a.enabled && !a.triggered; });
+  if (active.length === 0) return { checked: 0, triggered: 0 };
+
+  const holdings = computeHoldingsSnapshot_();
+  const email = getAlertEmail();
+  const execUrl = getWebAppExecUrl();
+  let triggeredCount = 0;
+
+  alerts.forEach(function(alert) {
+    if (!alert.enabled || alert.triggered) return;
+
+    const h = holdings[alert.coin];
+    const price = readCachedPrice(alert.coin);
+    if (!h || h.amount <= 0 || h.avgBuy <= 0 || typeof price !== 'number' || isNaN(price)) return;
+
+    const pnlPct = ((price - h.avgBuy) / h.avgBuy) * 100;
+    const isUpAlert = alert.thresholdPct > 0;
+    const crossed = isUpAlert ? pnlPct >= alert.thresholdPct : pnlPct <= alert.thresholdPct;
+    if (!crossed) return;
+
+    alert.triggered = true;
+    alert.triggeredAt = Date.now();
+    triggeredCount++;
+
+    if (email) {
+      try {
+        const sign = alert.thresholdPct > 0 ? '+' : '';
+        const subject = 'Vault: ' + alert.coin + ' достигла ' + sign + alert.thresholdPct + '% от точки входа';
+        const body = [
+          'Монета: ' + alert.coin,
+          'Точка входа: $' + h.avgBuy.toFixed(6),
+          'Текущая цена: $' + price.toFixed(6),
+          'Изменение от точки входа: ' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%',
+          'Порог алерта: ' + sign + alert.thresholdPct + '%',
+          '',
+          execUrl ? ('Открыть портфель: ' + execUrl) : ''
+        ].join('\n');
+        MailApp.sendEmail(email, subject, body);
+      } catch (e) {
+        Logger.log('checkPriceAlerts email error: ' + e);
+      }
+    }
+  });
+
+  savePriceAlerts_(alerts);
+  return { checked: active.length, triggered: triggeredCount };
 }
 
 function processChunk(chunk, type, cache) {

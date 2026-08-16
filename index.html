@@ -2424,6 +2424,39 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Price Alerts -->
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">🔔 Уведомления по цене</div>
+                            </div>
+                            <div class="card-body-pad">
+                                <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Письмо на email, когда цена монеты изменится на заданный % от вашей точки входа. Проверка идёт раз в час тем же серверным триггером, что обновляет цены — работает, даже если приложение закрыто. Настоящие push-уведомления Google Apps Script не поддерживает.</p>
+                                <div class="form-group">
+                                    <label class="form-label">Email для уведомлений</label>
+                                    <div style="display:flex;gap:8px;">
+                                        <input type="email" class="form-input" id="alertEmailInput" placeholder="you@example.com">
+                                        <button type="button" class="btn btn-secondary" onclick="saveAlertEmailUi()">Сохранить</button>
+                                    </div>
+                                </div>
+                                <div class="form-group" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                                    <label class="form-label">Новое уведомление</label>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label class="form-label" style="font-size:10px;">Тикер / UCID</label>
+                                            <input type="text" class="form-input" id="alertCoinInput" placeholder="APT или 21794">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" style="font-size:10px;">Порог, % от точки входа</label>
+                                            <input type="number" class="form-input" id="alertPctInput" step="any" placeholder="напр. 20 или -10">
+                                        </div>
+                                    </div>
+                                    <p style="font-size:11px;color:var(--text-muted);margin:6px 0 8px;">Положительное число — уведомить при росте (напр. <strong style="color:var(--cyan)">20</strong> = +20%), отрицательное — при падении (напр. <strong style="color:var(--cyan)">-10</strong> = -10%).</p>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="addPriceAlertUi()">+ Добавить уведомление</button>
+                                </div>
+                                <div id="priceAlertsList" class="tv-override-list" style="margin-top:14px;"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3393,6 +3426,115 @@
             el.innerHTML = items.map(function(item) {
                 return '<div class="tv-override-item"><span><strong>' + item.key + '</strong> → <span class="sym">' + item.symbol + '</span></span>' +
                     '<button type="button" title="Удалить" onclick="removeTvSymbolOverride(\'' + jsEscape(item.key) + '\')">✕</button></div>';
+            }).join('');
+        }
+
+        /* ── Уведомления по цене (email, % от точки входа) ── */
+        var priceAlertsCache = [];
+
+        function loadPriceAlerts() {
+            google.script.run
+                .withSuccessHandler(function(alerts) {
+                    priceAlertsCache = alerts || [];
+                    renderPriceAlertsList();
+                })
+                .withFailureHandler(function() {})
+                .getPriceAlerts();
+
+            google.script.run
+                .withSuccessHandler(function(email) {
+                    var input = document.getElementById('alertEmailInput');
+                    if (input && email) input.value = email;
+                })
+                .withFailureHandler(function() {})
+                .getAlertEmail();
+        }
+
+        function saveAlertEmailUi() {
+            var input = document.getElementById('alertEmailInput');
+            var email = (input.value || '').trim();
+            showLoading(true, 'Сохранение...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) showToast('Email сохранён');
+                    else showToast(res && res.error ? res.error : 'Ошибка', 'error');
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка сохранения', 'error'); })
+                .saveAlertEmail(email);
+        }
+
+        function addPriceAlertUi() {
+            var coinInput = document.getElementById('alertCoinInput');
+            var pctInput = document.getElementById('alertPctInput');
+            var coin = coinInput.value.trim();
+            var pct = parseFloat(pctInput.value);
+
+            if (!coin) { showToast('Укажите тикер или UCID монеты', 'error'); return; }
+            if (isNaN(pct) || pct === 0) { showToast('Укажите ненулевой процент (например, 20 или -10)', 'error'); return; }
+
+            showLoading(true, 'Сохранение...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) {
+                        priceAlertsCache = res.alerts || [];
+                        renderPriceAlertsList();
+                        coinInput.value = '';
+                        pctInput.value = '';
+                        showToast('Уведомление добавлено');
+                    } else {
+                        showToast(res && res.error ? res.error : 'Ошибка', 'error');
+                    }
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка сохранения', 'error'); })
+                .addPriceAlert(coin, pct);
+        }
+
+        function deletePriceAlertUi(id) {
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        priceAlertsCache = res.alerts || [];
+                        renderPriceAlertsList();
+                        showToast('Уведомление удалено');
+                    }
+                })
+                .withFailureHandler(function() { showToast('Ошибка удаления', 'error'); })
+                .deletePriceAlert(id);
+        }
+
+        function resetPriceAlertUi(id) {
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.success) {
+                        priceAlertsCache = res.alerts || [];
+                        renderPriceAlertsList();
+                        showToast('Уведомление снова активно');
+                    }
+                })
+                .withFailureHandler(function() { showToast('Ошибка', 'error'); })
+                .resetPriceAlert(id);
+        }
+
+        function renderPriceAlertsList() {
+            var el = document.getElementById('priceAlertsList');
+            if (!el) return;
+
+            if (!priceAlertsCache || priceAlertsCache.length === 0) {
+                el.innerHTML = '<p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Уведомлений пока нет.</p>';
+                return;
+            }
+
+            el.innerHTML = priceAlertsCache.map(function(a) {
+                var name = escapeHtml(getCoinName(a.coin) || a.coin);
+                var sign = a.thresholdPct > 0 ? '+' : '';
+                var statusHtml = a.triggered
+                    ? '<span style="color:var(--orange);">сработало</span> <button type="button" title="Включить снова" onclick="resetPriceAlertUi(\'' + jsEscape(a.id) + '\')">↻</button>'
+                    : '<span style="color:var(--green);">активно</span>';
+                return '<div class="tv-override-item"><span><strong>' + name + '</strong> ' +
+                    '<span class="sym">' + sign + a.thresholdPct + '%</span> · ' + statusHtml + '</span>' +
+                    '<button type="button" title="Удалить" onclick="deletePriceAlertUi(\'' + jsEscape(a.id) + '\')">✕</button></div>';
             }).join('');
         }
 
@@ -5469,6 +5611,7 @@
         loadSetupInfo();
         loadTvSymbolOverrides();
         renderTvSymbolOverridesList();
+        loadPriceAlerts();
         initPwaInstall();
         refreshData();
 
