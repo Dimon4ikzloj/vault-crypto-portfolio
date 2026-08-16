@@ -3942,19 +3942,17 @@
             var el = document.getElementById(elId);
             if (!el) return;
 
-            if (!items || items.length === 0) {
+            var visible = (items || []).filter(function(a) { return !a.triggered; });
+            if (visible.length === 0) {
                 el.innerHTML = '<p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Уведомлений пока нет.</p>';
                 return;
             }
 
-            el.innerHTML = items.map(function(a) {
+            el.innerHTML = visible.map(function(a) {
                 var name = escapeHtml(getCoinName(a.coin) || a.coin);
                 var sign = a.thresholdPct > 0 ? '+' : '';
-                var statusHtml = a.triggered
-                    ? '<span style="color:var(--orange);">сработало</span> <button type="button" title="Включить снова" onclick="resetPriceAlertUi(\'' + jsEscape(a.id) + '\')">↻</button>'
-                    : '<span style="color:var(--green);">активно</span>';
                 return '<div class="tv-override-item"><span><strong>' + name + '</strong> ' +
-                    '<span class="sym">' + sign + a.thresholdPct + '%</span> · ' + statusHtml + '</span>' +
+                    '<span class="sym">' + sign + a.thresholdPct + '%</span> · <span style="color:var(--green);">активно</span></span>' +
                     '<button type="button" title="Удалить" onclick="deletePriceAlertUi(\'' + jsEscape(a.id) + '\')">✕</button></div>';
             }).join('');
         }

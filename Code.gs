@@ -3102,7 +3102,7 @@ function buildPriceAlertEmail_(opts) {
   }
 
   const footerPlain = [
-    'Это уведомление одноразовое: после срабатывания оно отключается, чтобы не слать письмо каждый час. Чтобы получить его снова, в приложении нажмите ↻ у уведомления.',
+    'Это уведомление одноразовое: после срабатывания оно удаляется из списка в приложении. Чтобы получить его снова, добавьте порог заново.',
     execUrl ? ('Открыть портфель: ' + execUrl) : ''
   ].filter(Boolean).join('\n\n');
 
@@ -3135,7 +3135,7 @@ function buildPriceAlertEmail_(opts) {
     sectionHtml_('Позиция', posRows.map(function(r) { return kvHtml_(r[0], r[1]); }).join('')),
     sectionHtml_('Параметры уведомления', paramRows.map(function(r) { return kvHtml_(r[0], r[1]); }).join('')),
     opts.extraHtml || '',
-    '<p style="margin:24px 0 8px;font-size:13px;color:#555;">Это уведомление одноразовое: после срабатывания оно отключается, чтобы не слать письмо каждый час. Чтобы получить его снова, в приложении нажмите ↻ у уведомления.</p>',
+    '<p style="margin:24px 0 8px;font-size:13px;color:#555;">Это уведомление одноразовое: после срабатывания оно удаляется из списка в приложении. Чтобы получить его снова, добавьте порог заново.</p>',
     execUrl ? ('<p style="margin:0;"><a href="' + escapeEmailHtml_(execUrl) + '">Открыть портфель</a></p>') : '',
     '</div>'
   ].join('');
@@ -3190,7 +3190,7 @@ function buildTelegramAlertText_(opts) {
     'ID: ' + (alert.id || '—'),
     'Сработало: ' + (isTest ? 'это тест, алерт не отключён' : formatEmailDate_(opts.triggeredAt || Date.now())),
     '',
-    'Одноразовое уведомление. Чтобы получить снова — ↻ в приложении.'
+    'Одноразовое уведомление. После срабатывания оно удаляется из списка. Чтобы получить снова — добавьте порог заново.'
   ];
   if (execUrl) lines.push('Портфель: ' + execUrl);
   return lines.join('\n');
@@ -3442,8 +3442,8 @@ function computeHoldingsSnapshot_() {
 /**
  * Вызывается из updateAllCoins() каждый час. Для каждого включённого и ещё не
  * сработавшего алерта сравнивает текущий % изменения цены от точки входа с
- * порогом; при достижении — шлёт письмо и помечает алерт сработавшим
- * (одноразово, чтобы не слать письмо на каждый час подряд).
+ * порогом; при достижении — шлёт письмо/Telegram и удаляет уведомление
+ * из списка, чтобы не слать его каждый час.
  */
 function checkPriceAlerts() {
   const alerts = getPriceAlerts();
@@ -3457,20 +3457,25 @@ function checkPriceAlerts() {
   const canEmail = !!email;
   const canTelegram = !!(telegram.token && telegram.chatId);
   let triggeredCount = 0;
+  const remaining = [];
 
   alerts.forEach(function(alert) {
-    if (!alert.enabled || alert.triggered) return;
+    if (alert.triggered) return;
 
     const h = holdings[alert.coin];
     const price = readCachedPrice(alert.coin);
-    if (!h || h.amount <= 0 || h.avgBuy <= 0 || typeof price !== 'number' || isNaN(price)) return;
+    const canCheck = !!(alert.enabled && h && h.amount > 0 && h.avgBuy > 0 && typeof price === 'number' && !isNaN(price));
+    let crossed = false;
+    if (canCheck) {
+      const pnlPct = ((price - h.avgBuy) / h.avgBuy) * 100;
+      const isUpAlert = alert.thresholdPct > 0;
+      crossed = isUpAlert ? pnlPct >= alert.thresholdPct : pnlPct <= alert.thresholdPct;
+    }
 
-    const pnlPct = ((price - h.avgBuy) / h.avgBuy) * 100;
-    const isUpAlert = alert.thresholdPct > 0;
-    const crossed = isUpAlert ? pnlPct >= alert.thresholdPct : pnlPct <= alert.thresholdPct;
-    if (!crossed) return;
-
-    if (!canEmail && !canTelegram) return;
+    if (!crossed || (!canEmail && !canTelegram)) {
+      remaining.push(alert);
+      return;
+    }
 
     const triggeredAt = Date.now();
     const message = buildPriceAlertEmail_({
@@ -3512,13 +3517,13 @@ function checkPriceAlerts() {
     }
 
     if (delivered) {
-      alert.triggered = true;
-      alert.triggeredAt = triggeredAt;
       triggeredCount++;
+      return;
     }
+    remaining.push(alert);
   });
 
-  savePriceAlerts_(alerts);
+  savePriceAlerts_(remaining);
   return { checked: active.length, triggered: triggeredCount };
 }
 
