@@ -57,6 +57,7 @@
 | Функция | Зачем |
 |---------|--------|
 | `authorizeExternalRequests` | Доступ к CoinMarketCap |
+| `authorizeSendMail` | Отправка писем с уведомлениями по цене |
 | `setupAutoUpdate` | Фоновое обновление цен (триггер каждый час, API — раз в 4 ч.) |
 
 Подтвердите **Разрешить** в окне Google.

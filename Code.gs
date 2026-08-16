@@ -533,11 +533,31 @@ function normalizeTxType(raw) {
   if (t === 'sell' || t === 'продажа') return 'Продажа';
   if (t === 'airdrop' || t === 'аирдроп' || t === 'air drop') return 'Аирдроп';
   if (t === 'scam' || t === 'скам') return 'Скам';
+  if (t === 'correction' || t === 'adjustment' || t === 'корректировка') return 'Корректировка';
   return String(raw || '').trim();
+}
+
+const VALID_TX_TYPES = ['Покупка', 'Продажа', 'Аирдроп', 'Скам', 'Корректировка'];
+
+function isValidTxType(type) {
+  return VALID_TX_TYPES.indexOf(type) !== -1;
 }
 
 function isScamType(type) {
   return type === 'Скам';
+}
+
+/**
+ * "Корректировка себестоимости" — служебная сделка без изменения количества
+ * монет (amount = 0), только меняет "Вложено" на сумму total (может быть
+ * отрицательной). Нужна, чтобы честно (без подделки цены/количества в других
+ * строках) перенести нереализованный P&L между монетами — например, при
+ * ребалансировке "с переносом просадки" каждая сторона (продажа/покупка)
+ * пишется по РЕАЛЬНОЙ цене и количеству, а разница в себестоимости
+ * оформляется отдельной, ясно подписанной строкой.
+ */
+function isCorrectionType(type) {
+  return type === 'Корректировка';
 }
 
 function getScamCoinSet(transactions) {
@@ -899,7 +919,7 @@ function addTransaction(data) {
   const sheet = info.sheet;
 
   const txType = normalizeTxType(data.type);
-  if (txType !== 'Покупка' && txType !== 'Продажа' && txType !== 'Аирдроп' && txType !== 'Скам') {
+  if (!isValidTxType(txType)) {
     return { success: false, error: 'Неизвестный тип сделки: ' + data.type };
   }
 
@@ -907,6 +927,7 @@ function addTransaction(data) {
   const coinFormatted = normalizeCoinKey(data.coin);
   const isAirdrop = txType === 'Аирдроп';
   const isScam = txType === 'Скам';
+  const isCorrection = isCorrectionType(txType);
   let amount = parseFloat(data.amount) || 0;
   let price = parseFloat(data.price) || 0;
   let total = parseFloat(data.total) || 0;
@@ -924,15 +945,25 @@ function addTransaction(data) {
     amount = 1;
     price = total;
     fee = 0;
+  } else if (isCorrection) {
+    // Корректировка не трогает количество монет — только "Вложено" (может
+    // быть отрицательной величиной, чтобы уменьшить себестоимость).
+    amount = 0;
+    price = 0;
+    fee = 0;
+    total = parseSheetNumber(data.total);
+    if (!total) {
+      return { success: false, error: 'Укажите ненулевую сумму корректировки' };
+    }
   }
 
   if (!coinFormatted) {
     return { success: false, error: 'Укажите монету' };
   }
-  if (!isScam && amount <= 0) {
+  if (!isScam && !isCorrection && amount <= 0) {
     return { success: false, error: isAirdrop ? 'Укажите количество монет из аирдропа' : 'Количество должно быть больше 0' };
   }
-  if (!isAirdrop && !isScam && (price <= 0 || total <= 0)) {
+  if (!isAirdrop && !isScam && !isCorrection && (price <= 0 || total <= 0)) {
     return { success: false, error: 'Укажите цену и сумму сделки' };
   }
 
@@ -955,23 +986,28 @@ function addTransaction(data) {
   }
 
   const coinAcquisitions = [];
+  let correctionCost = 0;
   for (let i = 1; i < allData.length; i++) {
     const rowCoin = String(allData[i][2]).toUpperCase().trim();
     const rowType = normalizeTxType(allData[i][1]);
-    if (rowCoin === coinFormatted && isAcquisitionType(rowType) && normalizeTxId(allData[i][0], i + 1)) {
-      coinAcquisitions.push({
-        amount: parseFloat(allData[i][3]) || 0,
-        price: parseFloat(rowType === 'Аирдроп' ? 0 : allData[i][4]) || 0
-      });
+    if (rowCoin === coinFormatted && normalizeTxId(allData[i][0], i + 1)) {
+      if (isAcquisitionType(rowType)) {
+        coinAcquisitions.push({
+          amount: parseFloat(allData[i][3]) || 0,
+          price: parseFloat(rowType === 'Аирдроп' ? 0 : allData[i][4]) || 0
+        });
+      } else if (isCorrectionType(rowType)) {
+        correctionCost += parseFloat(allData[i][5]) || 0;
+      }
     }
   }
 
   let avgBuy = 0;
   let pnl = 0;
 
-  if (txType === 'Продажа' && coinAcquisitions.length > 0) {
+  if (txType === 'Продажа' && (coinAcquisitions.length > 0 || correctionCost)) {
     const totalAmount = coinAcquisitions.reduce((s, b) => s + b.amount, 0);
-    const totalCost = coinAcquisitions.reduce((s, b) => s + (b.amount * b.price), 0);
+    const totalCost = coinAcquisitions.reduce((s, b) => s + (b.amount * b.price), 0) + correctionCost;
     if (totalAmount > 0) {
       avgBuy = totalCost / totalAmount;
       pnl = (price - avgBuy) * amount - fee;
@@ -992,7 +1028,7 @@ function addTransaction(data) {
     data.date,
     pnl,
     avgBuy,
-    data.note || (isAirdrop ? 'Аирдроп' : (isScam ? 'Скам' : ''))
+    data.note || (isAirdrop ? 'Аирдроп' : (isScam ? 'Скам' : (isCorrection ? 'Корректировка себестоимости' : '')))
   ]]);
 
   sheet.getRange(lastRow, 1).setNumberFormat('@');
@@ -1008,6 +1044,27 @@ function addTransaction(data) {
   return {success: true};
 }
 
+function isSwapNote_(note) {
+  const n = String(note || '');
+  return n.indexOf('Ребалансировка') === 0 ||
+    n.indexOf('Обмен → ') === 0 ||
+    n.indexOf('Обмен ← ') === 0;
+}
+
+function isDrawdownSwapNote_(note) {
+  return String(note || '').indexOf('Ребалансировка (просадка)') === 0;
+}
+
+function formatSwapNote_(directionArrow, otherCoin, userNote, transferDrawdown) {
+  const prefix = transferDrawdown
+    ? ('Ребалансировка (просадка) ' + directionArrow + ' ' + otherCoin)
+    : ('Ребалансировка ' + directionArrow + ' ' + otherCoin);
+  const extra = String(userNote || '').trim();
+  if (!extra) return prefix;
+  if (isSwapNote_(extra)) return extra;
+  return prefix + ' | ' + extra;
+}
+
 /**
  * Обмен одной монеты на другую напрямую (например, APT → NEAR), минуя доллары
  * на балансе. Записывается как обычная "Продажа" исходной монеты (с расчётом
@@ -1015,6 +1072,9 @@ function addTransaction(data) {
  * те же две строки, что получились бы, если добавить их вручную по отдельности,
  * но обе валидируются и записываются за один проход, чтобы при ошибке в одной
  * из сторон не оставалась "повисшая" половина обмена.
+ *
+ * transferDrawdown: убыток не фиксируется, а исходная стоимость проданных монет
+ * переносится в точку входа купленной (APT $50 вложений → 12.5 NEAR по $4).
  */
 function addSwapTransaction(data) {
   const info = getDealsSheet(true);
@@ -1044,8 +1104,10 @@ function addSwapTransaction(data) {
   const sellTotal = parseSheetNumber(sell.total) || (sellAmount * sellPrice);
 
   const buyAmount = parseSheetNumber(buy.amount);
-  const buyPrice = parseSheetNumber(buy.price);
-  const buyTotal = parseSheetNumber(buy.total) || (buyAmount * buyPrice);
+  let buyPrice = parseSheetNumber(buy.price);
+  let buyTotal = parseSheetNumber(buy.total) || (buyAmount * buyPrice);
+  const transferDrawdown = !!(data && data.transferDrawdown);
+  const userNote = (data && data.note) || (sell && sell.note) || '';
 
   if (sellAmount <= 0 || sellPrice <= 0 || sellTotal <= 0) {
     return { success: false, error: 'Укажите корректное количество и цену для монеты, которую отдаёте' };
@@ -1088,7 +1150,18 @@ function addSwapTransaction(data) {
 
   let avgBuy = 0;
   let pnl = 0;
-  if (coinAcquisitions.length > 0) {
+  if (transferDrawdown) {
+    const snap = computeHoldingsSnapshot_();
+    const hSell = snap[sellCoin];
+    avgBuy = hSell && hSell.avgBuy > 0 ? hSell.avgBuy : 0;
+    if (avgBuy <= 0) {
+      return { success: false, error: 'Нельзя перенести просадку: у отдаваемой монеты нет точки входа (капитал отбит или монеты бесплатные)' };
+    }
+    const transferredCost = avgBuy * sellAmount;
+    buyTotal = transferredCost;
+    buyPrice = transferredCost / buyAmount;
+    pnl = -fee;
+  } else if (coinAcquisitions.length > 0) {
     const totalAmount = coinAcquisitions.reduce((s, b) => s + b.amount, 0);
     const totalCost = coinAcquisitions.reduce((s, b) => s + (b.amount * b.price), 0);
     if (totalAmount > 0) {
@@ -1096,6 +1169,9 @@ function addSwapTransaction(data) {
       pnl = (sellPrice - avgBuy) * sellAmount - fee;
     }
   }
+
+  const sellNote = formatSwapNote_('→', buyCoin, userNote, transferDrawdown);
+  const buyNote = formatSwapNote_('←', sellCoin, userNote, transferDrawdown);
 
   const baseId = String(Date.now());
   const sellId = baseId + '-swap-out';
@@ -1106,8 +1182,8 @@ function addSwapTransaction(data) {
   // это произойдёт до записи (все проверки выше), а не между двумя отдельными
   // сохранениями, так что "половинчатого" обмена быть не может.
   sheet.getRange(lastRow, 1, 2, 11).setValues([
-    [sellId, 'Продажа', sellCoin, sellAmount, sellPrice, sellTotal, fee, date, pnl, avgBuy, sell.note || ('Ребалансировка → ' + buyCoin)],
-    [buyId, 'Покупка', buyCoin, buyAmount, buyPrice, buyTotal, 0, date, 0, 0, buy.note || ('Ребалансировка ← ' + sellCoin)]
+    [sellId, 'Продажа', sellCoin, sellAmount, sellPrice, sellTotal, fee, date, pnl, avgBuy, sellNote],
+    [buyId, 'Покупка', buyCoin, buyAmount, buyPrice, buyTotal, 0, date, 0, 0, buyNote]
   ]);
 
   sheet.getRange(lastRow, 1, 2, 1).setNumberFormat('@');
@@ -1238,7 +1314,7 @@ function updateTransaction(data) {
     const totalCost = coinAcquisitions.reduce((s, b) => s + (b.amount * b.price), 0);
     if (totalAmount > 0) {
       avgBuy = totalCost / totalAmount;
-      pnl = (price - avgBuy) * amount - fee;
+      pnl = isDrawdownSwapNote_(data.note) ? -fee : ((price - avgBuy) * amount - fee);
     }
   }
 
@@ -2210,7 +2286,21 @@ function formatApiError(error) {
   if (message.indexOf('script.external_request') !== -1 || message.indexOf('UrlFetchApp.fetch') !== -1) {
     return 'Нет разрешения на внешние запросы. В Apps Script запустите authorizeExternalRequests() и подтвердите доступ.';
   }
+  if (isMailAuthError_(message)) {
+    return formatMailAuthError_();
+  }
   return message;
+}
+
+function isMailAuthError_(error) {
+  const message = String(error || '');
+  return message.indexOf('script.send_mail') !== -1 ||
+    message.indexOf('MailApp.sendEmail') !== -1 ||
+    (message.indexOf('MailApp') !== -1 && message.indexOf('разрешен') !== -1);
+}
+
+function formatMailAuthError_() {
+  return 'Нет разрешения на отправку почты. В редакторе Apps Script выберите authorizeSendMail → ▶ Выполнить → Разрешить. Затем вернитесь и снова нажмите «Тест».';
 }
 
 function formatTriggerError(error) {
@@ -2334,6 +2424,19 @@ function authorizeExternalRequests() {
     success: response.getResponseCode() === 200,
     status: response.getResponseCode(),
     body: response.getContentText()
+  };
+}
+
+/**
+ * Запусти ОДИН РАЗ вручную в редакторе Apps Script, чтобы Google выдал
+ * право на MailApp (письма с алертами). Из веб-приложения это окно
+ * согласия само не появляется — только из редактора.
+ */
+function authorizeSendMail() {
+  const remaining = MailApp.getRemainingDailyQuota();
+  return {
+    success: true,
+    message: 'Разрешение на отправку почты выдано. Осталось писем сегодня: ' + remaining + '.'
   };
 }
 
@@ -2535,6 +2638,301 @@ function saveAlertEmail(email) {
   return { success: true, email: clean };
 }
 
+function escapeEmailHtml_(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function formatEmailMoney_(n) {
+  if (typeof n !== 'number' || !isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  const digits = abs >= 1 ? 2 : (abs >= 0.01 ? 4 : 6);
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + abs.toFixed(digits);
+}
+
+function formatEmailPct_(n, digits) {
+  if (typeof n !== 'number' || !isFinite(n)) return '—';
+  const sign = n > 0 ? '+' : '';
+  return sign + n.toFixed(digits == null ? 2 : digits) + '%';
+}
+
+function formatEmailQty_(n) {
+  if (typeof n !== 'number' || !isFinite(n)) return '—';
+  if (Math.abs(n) >= 100) return n.toFixed(2);
+  if (Math.abs(n) >= 1) return n.toFixed(4);
+  return String(parseFloat(n.toFixed(8)));
+}
+
+function formatEmailDate_(ms) {
+  if (!ms) return '—';
+  try {
+    const tz = Session.getScriptTimeZone() || 'GMT+5';
+    return Utilities.formatDate(new Date(ms), tz, 'dd.MM.yyyy HH:mm');
+  } catch (e) {
+    return new Date(ms).toLocaleString('ru-RU');
+  }
+}
+
+function describeCoinForEmail_(coin) {
+  const key = normalizeCoinKey(coin) || String(coin || '');
+  const meta = readCoinMeta(key) || {};
+  const ucid = meta.id || (isNumericId(key) ? key : (resolvePortfolioCoinId(key) || ''));
+  const symbol = meta.symbol || (!isNumericId(key) ? key : '');
+  const name = meta.name || symbol || key;
+  const title = symbol && name && String(name).toUpperCase() !== String(symbol).toUpperCase()
+    ? (name + ' (' + symbol + ')')
+    : (name || key);
+  return { key: key, name: name, symbol: symbol, ucid: ucid, title: title };
+}
+
+function kvPlain_(label, value) {
+  return label + ': ' + value;
+}
+
+function kvHtml_(label, value) {
+  return '<tr><td style="padding:4px 16px 4px 0;color:#666;vertical-align:top;white-space:nowrap;">' +
+    escapeEmailHtml_(label) + '</td><td style="padding:4px 0;color:#111;">' +
+    escapeEmailHtml_(value) + '</td></tr>';
+}
+
+function sectionHtml_(title, rowsHtml) {
+  return '<h3 style="margin:20px 0 8px;font-size:14px;color:#0f766e;">' + escapeEmailHtml_(title) + '</h3>' +
+    '<table style="border-collapse:collapse;font-size:14px;line-height:1.45;">' + rowsHtml + '</table>';
+}
+
+/**
+ * Собирает тему и текст письма по ценовому алерту: монета, порог, текущая
+ * цена, позиция и все сохранённые параметры уведомления.
+ */
+function buildPriceAlertEmail_(opts) {
+  const alert = opts.alert || {};
+  const h = opts.holding || {};
+  const coin = describeCoinForEmail_(alert.coin);
+  const isTest = !!opts.isTest;
+  const price = (typeof opts.price === 'number' && isFinite(opts.price)) ? opts.price : null;
+  const avgBuy = h.avgBuy > 0 ? h.avgBuy : 0;
+  const amount = h.amount > 0 ? h.amount : 0;
+  const costBasis = h.costBasis > 0 ? h.costBasis : 0;
+  const thresholdPct = parseFloat(alert.thresholdPct);
+  const isUp = thresholdPct > 0;
+  const targetPrice = avgBuy > 0 && isFinite(thresholdPct) ? avgBuy * (1 + thresholdPct / 100) : null;
+  const pnlPct = (avgBuy > 0 && price !== null) ? ((price - avgBuy) / avgBuy) * 100 : null;
+  const pnlAbsPerCoin = (avgBuy > 0 && price !== null) ? (price - avgBuy) : null;
+  const marketValue = (amount > 0 && price !== null) ? amount * price : null;
+  const unrealized = (marketValue !== null && costBasis > 0) ? (marketValue - costBasis) : null;
+  const cacheInfo = getPriceCacheInfo();
+  const execUrl = opts.execUrl || getWebAppExecUrl();
+
+  const direction = isUp ? 'рост' : 'падение';
+  const whatHappened = !isFinite(thresholdPct)
+    ? 'Порог уведомления не задан.'
+    : (isUp
+      ? ('Цена выросла и пересекла порог ' + formatEmailPct_(thresholdPct) + ' от точки входа.')
+      : ('Цена упала и пробила порог ' + formatEmailPct_(thresholdPct) + ' от точки входа.'));
+
+  const subject = isTest
+    ? ('Vault: тест уведомлений — ' + coin.title)
+    : ('Vault: ' + coin.title + ' ' + (isUp ? 'достигла' : 'упала до') + ' ' + formatEmailPct_(thresholdPct) + ' от входа');
+
+  const introPlain = isTest
+    ? 'Это тестовое письмо от Vault. Если вы его получили, отправка на этот адрес работает. Ниже — как выглядит настоящее уведомление и какие параметры сейчас сохранены.'
+    : ('Сработало уведомление по цене: ' + whatHappened);
+
+  const coinRows = [
+    ['Название', coin.name || '—'],
+    ['Тикер', coin.symbol || '—'],
+    ['UCID (CoinMarketCap)', coin.ucid ? String(coin.ucid) : '—'],
+    ['Ключ в портфеле', coin.key || '—']
+  ];
+
+  const eventRows = [
+    ['Что произошло', isTest ? ('Пример: уведомление сработает, когда цена ' + (isUp ? 'вырастет на ' : 'упадёт на ') + formatEmailPct_(Math.abs(thresholdPct)) + ' от точки входа.') : whatHappened],
+    ['Направление', direction],
+    ['Порог от точки входа', isFinite(thresholdPct) ? formatEmailPct_(thresholdPct) : '—'],
+    ['Целевая цена порога', targetPrice !== null ? formatEmailMoney_(targetPrice) : 'нет точки входа'],
+    ['Точка входа', avgBuy > 0 ? formatEmailMoney_(avgBuy) : 'нет открытой позиции'],
+    ['Текущая цена', price !== null ? formatEmailMoney_(price) : 'нет данных'],
+    ['Изменение от входа', pnlPct !== null ? (formatEmailPct_(pnlPct) + (pnlAbsPerCoin !== null ? ' (' + (pnlAbsPerCoin >= 0 ? '+' : '') + formatEmailMoney_(pnlAbsPerCoin) + ' за монету)' : '')) : '—']
+  ];
+
+  const posRows = [
+    ['Количество', amount > 0 ? (formatEmailQty_(amount) + (coin.symbol ? (' ' + coin.symbol) : '')) : 'нет открытой позиции'],
+    ['Вложено', costBasis > 0 ? formatEmailMoney_(costBasis) : '—'],
+    ['Рыночная стоимость', marketValue !== null ? formatEmailMoney_(marketValue) : '—'],
+    ['Нереализованный P&L', unrealized !== null ? ((unrealized >= 0 ? '+' : '') + formatEmailMoney_(unrealized) + (pnlPct !== null ? ' (' + formatEmailPct_(pnlPct) + ')' : '')) : '—']
+  ];
+
+  const paramRows = [
+    ['ID уведомления', alert.id ? String(alert.id) : '—'],
+    ['Монета', coin.title],
+    ['Тип', isUp ? 'уведомить при росте' : 'уведомить при падении'],
+    ['Порог, % от точки входа', isFinite(thresholdPct) ? formatEmailPct_(thresholdPct) : '—'],
+    ['Целевая цена', targetPrice !== null ? formatEmailMoney_(targetPrice) : '—'],
+    ['Включено', alert.enabled === false ? 'нет' : 'да'],
+    ['Уже срабатывало', alert.triggered ? 'да' : 'нет'],
+    ['Создано', formatEmailDate_(alert.createdAt)],
+    ['Сработало', isTest ? 'это тест, уведомление не отмечено как сработавшее' : formatEmailDate_(opts.triggeredAt || Date.now())],
+    ['Адрес доставки', opts.email || '—'],
+    ['Последняя синхронизация цен', cacheInfo.lastSuccessfulSyncAt ? formatEmailDate_(cacheInfo.lastSuccessfulSyncAt) : '—'],
+    ['Проверка', 'раз в час серверным триггером, даже если приложение закрыто']
+  ];
+
+  function rowsToPlain(title, rows) {
+    return [title].concat(rows.map(function(r) { return '  ' + kvPlain_(r[0], r[1]); })).join('\n');
+  }
+
+  const footerPlain = [
+    'Это уведомление одноразовое: после срабатывания оно отключается, чтобы не слать письмо каждый час. Чтобы получить его снова, в приложении нажмите ↻ у уведомления.',
+    execUrl ? ('Открыть портфель: ' + execUrl) : ''
+  ].filter(Boolean).join('\n\n');
+
+  const extraPlain = opts.extraPlain ? ('\n\n' + opts.extraPlain) : '';
+
+  const body = [
+    'Vault — крипто-портфель',
+    '',
+    introPlain,
+    '',
+    rowsToPlain('Монета', coinRows),
+    '',
+    rowsToPlain('Срабатывание', eventRows),
+    '',
+    rowsToPlain('Позиция', posRows),
+    '',
+    rowsToPlain('Параметры уведомления', paramRows),
+    extraPlain,
+    '',
+    footerPlain
+  ].join('\n');
+
+  const html = [
+    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#111;line-height:1.5;max-width:640px;">',
+    '<p style="margin:0 0 4px;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#0f766e;">Vault — крипто-портфель</p>',
+    '<h2 style="margin:0 0 12px;font-size:20px;">' + escapeEmailHtml_(isTest ? 'Тестовое уведомление' : (coin.title + ' — порог ' + formatEmailPct_(thresholdPct))) + '</h2>',
+    '<p style="margin:0 0 8px;">' + escapeEmailHtml_(introPlain) + '</p>',
+    sectionHtml_('Монета', coinRows.map(function(r) { return kvHtml_(r[0], r[1]); }).join('')),
+    sectionHtml_('Срабатывание', eventRows.map(function(r) { return kvHtml_(r[0], r[1]); }).join('')),
+    sectionHtml_('Позиция', posRows.map(function(r) { return kvHtml_(r[0], r[1]); }).join('')),
+    sectionHtml_('Параметры уведомления', paramRows.map(function(r) { return kvHtml_(r[0], r[1]); }).join('')),
+    opts.extraHtml || '',
+    '<p style="margin:24px 0 8px;font-size:13px;color:#555;">Это уведомление одноразовое: после срабатывания оно отключается, чтобы не слать письмо каждый час. Чтобы получить его снова, в приложении нажмите ↻ у уведомления.</p>',
+    execUrl ? ('<p style="margin:0;"><a href="' + escapeEmailHtml_(execUrl) + '">Открыть портфель</a></p>') : '',
+    '</div>'
+  ].join('');
+
+  return { subject: subject, body: body, htmlBody: html };
+}
+
+function sendMail_(to, message) {
+  MailApp.sendEmail({
+    to: to,
+    subject: message.subject,
+    body: message.body,
+    htmlBody: message.htmlBody,
+    name: 'Vault'
+  });
+}
+
+function formatAlertListForEmail_(alerts) {
+  if (!alerts || !alerts.length) {
+    return {
+      plain: 'Настроенных уведомлений пока нет.',
+      html: '<p style="margin:16px 0 0;color:#555;">Настроенных уведомлений пока нет.</p>'
+    };
+  }
+
+  const holdings = computeHoldingsSnapshot_();
+  const lines = alerts.map(function(a, i) {
+    const coin = describeCoinForEmail_(a.coin);
+    const h = holdings[a.coin] || {};
+    const price = readCachedPrice(a.coin);
+    const avgBuy = h.avgBuy > 0 ? h.avgBuy : 0;
+    const target = avgBuy > 0 ? avgBuy * (1 + a.thresholdPct / 100) : null;
+    const pnlPct = (avgBuy > 0 && typeof price === 'number') ? ((price - avgBuy) / avgBuy) * 100 : null;
+    return [
+      (i + 1) + ') ' + coin.title,
+      '    Порог: ' + formatEmailPct_(a.thresholdPct) + ' от точки входа' + (target !== null ? ' (цель ' + formatEmailMoney_(target) + ')' : ''),
+      '    Сейчас: ' + (typeof price === 'number' ? formatEmailMoney_(price) : 'нет цены') +
+        (pnlPct !== null ? ', от входа ' + formatEmailPct_(pnlPct) : ''),
+      '    Статус: ' + (a.enabled === false ? 'выключено' : 'включено') + ', ' + (a.triggered ? 'уже сработало ' + formatEmailDate_(a.triggeredAt) : 'ждёт срабатывания'),
+      '    Создано: ' + formatEmailDate_(a.createdAt) + ' · ID ' + a.id
+    ].join('\n');
+  });
+
+  const htmlRows = alerts.map(function(a) {
+    const coin = describeCoinForEmail_(a.coin);
+    const h = holdings[a.coin] || {};
+    const price = readCachedPrice(a.coin);
+    const avgBuy = h.avgBuy > 0 ? h.avgBuy : 0;
+    const target = avgBuy > 0 ? avgBuy * (1 + a.thresholdPct / 100) : null;
+    const pnlPct = (avgBuy > 0 && typeof price === 'number') ? ((price - avgBuy) / avgBuy) * 100 : null;
+    return '<tr>' +
+      '<td style="padding:6px 12px 6px 0;vertical-align:top;"><strong>' + escapeEmailHtml_(coin.title) + '</strong></td>' +
+      '<td style="padding:6px 12px 6px 0;vertical-align:top;">' + escapeEmailHtml_(formatEmailPct_(a.thresholdPct)) +
+        (target !== null ? '<br><span style="color:#666;">цель ' + escapeEmailHtml_(formatEmailMoney_(target)) + '</span>' : '') + '</td>' +
+      '<td style="padding:6px 12px 6px 0;vertical-align:top;">' +
+        escapeEmailHtml_(typeof price === 'number' ? formatEmailMoney_(price) : 'нет цены') +
+        (pnlPct !== null ? '<br><span style="color:#666;">' + escapeEmailHtml_(formatEmailPct_(pnlPct)) + '</span>' : '') + '</td>' +
+      '<td style="padding:6px 0;vertical-align:top;">' +
+        escapeEmailHtml_(a.triggered ? ('сработало ' + formatEmailDate_(a.triggeredAt)) : 'ждёт') + '</td></tr>';
+  }).join('');
+
+  return {
+    plain: 'Все настроенные уведомления:\n\n' + lines.join('\n\n'),
+    html: '<h3 style="margin:20px 0 8px;font-size:14px;color:#0f766e;">Все настроенные уведомления</h3>' +
+      '<table style="border-collapse:collapse;font-size:14px;line-height:1.4;width:100%;">' +
+      '<tr style="color:#666;font-size:12px;"><td style="padding:0 12px 6px 0;">Монета</td><td style="padding:0 12px 6px 0;">Порог</td><td style="padding:0 12px 6px 0;">Сейчас</td><td style="padding:0 0 6px;">Статус</td></tr>' +
+      htmlRows + '</table>'
+  };
+}
+
+/**
+ * Отправляет тестовое письмо на указанный (или уже сохранённый) адрес —
+ * чтобы проверить, что отправка вообще работает, не дожидаясь реального
+ * срабатывания алерта. В письмо попадает полный набор параметров.
+ */
+function sendTestAlertEmail(email) {
+  const clean = String(email || '').trim() || getAlertEmail();
+  if (!clean) {
+    return { success: false, error: 'Укажите email' };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+    return { success: false, error: 'Некорректный email' };
+  }
+
+  try {
+    const alerts = getPriceAlerts();
+    const holdings = computeHoldingsSnapshot_();
+    const sample = alerts.filter(function(a) { return a.enabled; })[0] || alerts[0] || {
+      id: 'test',
+      coin: '—',
+      thresholdPct: 20,
+      enabled: true,
+      triggered: false,
+      createdAt: Date.now()
+    };
+    const holding = holdings[sample.coin] || {};
+    const listBlock = formatAlertListForEmail_(alerts);
+    const message = buildPriceAlertEmail_({
+      isTest: true,
+      alert: sample,
+      holding: holding,
+      price: sample.coin && sample.coin !== '—' ? readCachedPrice(sample.coin) : null,
+      email: clean,
+      extraPlain: listBlock.plain,
+      extraHtml: listBlock.html
+    });
+    sendMail_(clean, message);
+    return { success: true, email: clean };
+  } catch (e) {
+    return { success: false, error: isMailAuthError_(e) ? formatMailAuthError_() : String(e) };
+  }
+}
+
 function addPriceAlert(coin, thresholdPct) {
   const coinFormatted = normalizeCoinKey(coin);
   const pct = parseFloat(thresholdPct);
@@ -2621,7 +3019,10 @@ function computeHoldingsSnapshot_() {
       const costRemoved = avgBeforeSale * soldAmount;
       h.amount -= tx.amount;
       h.costBasis = Math.max(0, h.costBasis - costRemoved);
-      h.totalSoldCash += tx.total;
+      // Перенос просадки: капитал не «отбит» выручкой — стоимость уехала в другую монету.
+      if (!isDrawdownSwapNote_(tx.note)) {
+        h.totalSoldCash += tx.total;
+      }
     }
 
     if (h.amount <= 0.00000001) h.amount = 0;
@@ -2664,27 +3065,34 @@ function checkPriceAlerts() {
     const crossed = isUpAlert ? pnlPct >= alert.thresholdPct : pnlPct <= alert.thresholdPct;
     if (!crossed) return;
 
-    alert.triggered = true;
-    alert.triggeredAt = Date.now();
-    triggeredCount++;
-
     if (email) {
       try {
-        const sign = alert.thresholdPct > 0 ? '+' : '';
-        const subject = 'Vault: ' + alert.coin + ' достигла ' + sign + alert.thresholdPct + '% от точки входа';
-        const body = [
-          'Монета: ' + alert.coin,
-          'Точка входа: $' + h.avgBuy.toFixed(6),
-          'Текущая цена: $' + price.toFixed(6),
-          'Изменение от точки входа: ' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(2) + '%',
-          'Порог алерта: ' + sign + alert.thresholdPct + '%',
-          '',
-          execUrl ? ('Открыть портфель: ' + execUrl) : ''
-        ].join('\n');
-        MailApp.sendEmail(email, subject, body);
+        const triggeredAt = Date.now();
+        const message = buildPriceAlertEmail_({
+          isTest: false,
+          alert: alert,
+          holding: h,
+          price: price,
+          email: email,
+          execUrl: execUrl,
+          triggeredAt: triggeredAt
+        });
+        sendMail_(email, message);
+        alert.triggered = true;
+        alert.triggeredAt = triggeredAt;
+        triggeredCount++;
       } catch (e) {
         Logger.log('checkPriceAlerts email error: ' + e);
+        if (!isMailAuthError_(e)) {
+          alert.triggered = true;
+          alert.triggeredAt = Date.now();
+          triggeredCount++;
+        }
       }
+    } else {
+      alert.triggered = true;
+      alert.triggeredAt = Date.now();
+      triggeredCount++;
     }
   });
 
@@ -2759,7 +3167,8 @@ function testApiForSui() {
 /**
  * Первый запуск в редакторе Apps Script:
  * 1) authorizeExternalRequests → Разрешить
- * 2) setupAutoUpdate → Разрешить (фоновая синхронизация каждый час, API — раз в 4 ч.)
+ * 2) authorizeSendMail → Разрешить (письма с алертами по цене)
+ * 3) setupAutoUpdate → Разрешить (фоновая синхронизация каждый час, API — раз в 4 ч.)
  */
 function setupAutoUpdate() {
   const triggers = ScriptApp.getProjectTriggers();

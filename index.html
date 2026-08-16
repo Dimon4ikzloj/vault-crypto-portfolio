@@ -352,6 +352,38 @@
             min-width: 0;
         }
 
+        .swap-drawdown-box {
+            padding: 12px 14px;
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            border-radius: var(--radius-md);
+            background: rgba(251, 191, 36, 0.06);
+            margin: 10px 0 14px;
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            cursor: pointer;
+        }
+
+        .swap-drawdown-box input[type="checkbox"] {
+            margin-top: 3px;
+            flex-shrink: 0;
+            accent-color: #fbbf24;
+        }
+
+        .swap-drawdown-box strong {
+            display: block;
+            font-size: 13px;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .swap-drawdown-box .hint {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
         .card-title-row {
             display: flex;
             align-items: center;
@@ -687,6 +719,13 @@
         }
 
         .coin-action-btn.chart-btn { font-size: 14px; }
+
+        .coin-action-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-shrink: 0;
+        }
 
         .coin-avatar {
             width: 36px; height: 36px;
@@ -2434,10 +2473,12 @@
                                 <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Письмо на email, когда цена монеты изменится на заданный % от вашей точки входа. Проверка идёт раз в час тем же серверным триггером, что обновляет цены — работает, даже если приложение закрыто. Настоящие push-уведомления Google Apps Script не поддерживает.</p>
                                 <div class="form-group">
                                     <label class="form-label">Email для уведомлений</label>
-                                    <div style="display:flex;gap:8px;">
-                                        <input type="email" class="form-input" id="alertEmailInput" placeholder="you@example.com">
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <input type="email" class="form-input" id="alertEmailInput" placeholder="you@example.com" style="flex:1;min-width:160px;">
                                         <button type="button" class="btn btn-secondary" onclick="saveAlertEmailUi()">Сохранить</button>
+                                        <button type="button" class="btn btn-outline" onclick="sendTestAlertEmailUi()" title="Отправить тестовое письмо на этот адрес">✉ Тест</button>
                                     </div>
+                                    <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Первый раз Google спросит разрешение на почту: в Apps Script выберите <strong>authorizeSendMail</strong> → ▶ Выполнить → Разрешить. Из браузера это окно само не открывается.</p>
                                 </div>
                                 <div class="form-group" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
                                     <label class="form-label">Новое уведомление</label>
@@ -2596,7 +2637,7 @@
             </div>
             <div class="modal-body">
                 <form id="swapForm" onsubmit="submitSwapForm(event)">
-                    <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Для конвертации одной монеты в другую напрямую (например, APT → NEAR) — без прохождения через $ на балансе. Записывается как обычная «Продажа» + «Покупка» с одной датой.</p>
+                    <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Для конвертации одной монеты в другую напрямую (например, APT → NEAR) — без прохождения через $ на балансе. Записывается как «Продажа» + «Покупка» с одной датой. Опция «Перенести просадку» не фиксирует убыток, а переносит вложения в точку входа новой монеты.</p>
                     <div class="form-group">
                         <label class="form-label">Дата</label>
                         <input type="date" class="form-input" id="swapDate" autocomplete="off" oninput="swapDateTouched = true;" required>
@@ -2665,6 +2706,14 @@
                         </div>
                     </div>
 
+                    <label class="swap-drawdown-box" for="swapTransferDrawdown">
+                        <input type="checkbox" id="swapTransferDrawdown" onchange="updateSwapPreview()">
+                        <span>
+                            <strong>Перенести просадку</strong>
+                            <span class="hint">Убыток отданной монеты не фиксируется. В новую монету переносится исходная сумма вложений (не рыночная выручка), и её точка входа растёт на этот убыток.</span>
+                        </span>
+                    </label>
+
                     <div class="form-group" id="swapPreviewWrap" style="display:none;">
                         <label class="form-label" style="color:var(--cyan);">Итог обмена</label>
                         <div class="chart-sim-result" id="swapPreviewResult"></div>
@@ -2672,6 +2721,39 @@
 
                     <button type="submit" class="btn btn-primary btn-full">Сохранить обмен</button>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Modal (Уведомления по цене для конкретной монеты) -->
+    <div class="modal-overlay" id="alertModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="alertModalTitle">🔔 Уведомления по цене</div>
+                <button class="modal-close" onclick="closeAlertModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="chart-coin-stat" style="margin-bottom:16px;">
+                    <span class="lbl">Точка входа → текущая цена</span>
+                    <span class="val" id="alertModalPriceInfo">—</span>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Новый порог уведомления</label>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:10px;">% от точки входа</label>
+                            <input type="number" class="form-input" id="alertModalPctInput" step="any" placeholder="напр. 20 или -10" oninput="onAlertModalPctInput()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" style="font-size:10px;">или целевая цена ($)</label>
+                            <input type="number" class="form-input" id="alertModalPriceInput" step="any" min="0" placeholder="напр. 6.50" oninput="onAlertModalPriceInput()">
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="addPriceAlertForModalCoin()">+ Добавить</button>
+                    <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Можно ввести либо процент, либо сразу целевую цену — второе поле посчитается само. Положительный % — уведомить при росте, отрицательный — при падении. Письмо придёт на адрес из настроек ниже.</p>
+                </div>
+                <div id="alertModalList" class="tv-override-list" style="margin-top:14px;"></div>
+                <p style="font-size:11px;color:var(--text-muted);margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">Email для писем и полный список уведомлений — в карточке «🔔 Уведомления по цене» в настройках справа.</p>
             </div>
         </div>
     </div>
@@ -2886,12 +2968,19 @@
             if (e.target === document.getElementById('swapModal')) closeSwapModal();
         });
 
+        document.getElementById('alertModal').addEventListener('click', function(e) {
+            if (e.target === document.getElementById('alertModal')) closeAlertModal();
+        });
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && document.getElementById('chartModal').classList.contains('active')) {
                 closeChartModal();
             }
             if (e.key === 'Escape' && document.getElementById('swapModal').classList.contains('active')) {
                 closeSwapModal();
+            }
+            if (e.key === 'Escape' && document.getElementById('alertModal').classList.contains('active')) {
+                closeAlertModal();
             }
         });
 
@@ -3431,12 +3520,15 @@
 
         /* ── Уведомления по цене (email, % от точки входа) ── */
         var priceAlertsCache = [];
+        var alertModalCoin = '';
+        var alertModalAvgBuy = 0;
 
         function loadPriceAlerts() {
             google.script.run
                 .withSuccessHandler(function(alerts) {
                     priceAlertsCache = alerts || [];
                     renderPriceAlertsList();
+                    renderAlertModalList();
                 })
                 .withFailureHandler(function() {})
                 .getPriceAlerts();
@@ -3464,6 +3556,37 @@
                 .saveAlertEmail(email);
         }
 
+        function sendTestAlertEmailUi() {
+            var input = document.getElementById('alertEmailInput');
+            var email = (input.value || '').trim();
+            showLoading(true, 'Отправка тестового письма...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) showToast('Тестовое письмо отправлено на ' + res.email);
+                    else showToast(res && res.error ? res.error : 'Не удалось отправить письмо', 'error');
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    var msg = String((err && err.message) || err || '');
+                    if (msg.indexOf('script.send_mail') !== -1 || msg.indexOf('MailApp') !== -1) {
+                        showToast('Нет разрешения на почту. Apps Script → authorizeSendMail → Выполнить → Разрешить', 'error');
+                        return;
+                    }
+                    showToast('Ошибка отправки: ' + msg, 'error');
+                })
+                .sendTestAlertEmail(email);
+        }
+
+        function applyPriceAlertsResult(res) {
+            if (res && res.success) {
+                priceAlertsCache = res.alerts || [];
+                renderPriceAlertsList();
+                renderAlertModalList();
+            }
+            return res;
+        }
+
         function addPriceAlertUi() {
             var coinInput = document.getElementById('alertCoinInput');
             var pctInput = document.getElementById('alertPctInput');
@@ -3478,8 +3601,7 @@
                 .withSuccessHandler(function(res) {
                     showLoading(false);
                     if (res && res.success) {
-                        priceAlertsCache = res.alerts || [];
-                        renderPriceAlertsList();
+                        applyPriceAlertsResult(res);
                         coinInput.value = '';
                         pctInput.value = '';
                         showToast('Уведомление добавлено');
@@ -3495,8 +3617,7 @@
             google.script.run
                 .withSuccessHandler(function(res) {
                     if (res && res.success) {
-                        priceAlertsCache = res.alerts || [];
-                        renderPriceAlertsList();
+                        applyPriceAlertsResult(res);
                         showToast('Уведомление удалено');
                     }
                 })
@@ -3508,8 +3629,7 @@
             google.script.run
                 .withSuccessHandler(function(res) {
                     if (res && res.success) {
-                        priceAlertsCache = res.alerts || [];
-                        renderPriceAlertsList();
+                        applyPriceAlertsResult(res);
                         showToast('Уведомление снова активно');
                     }
                 })
@@ -3517,16 +3637,16 @@
                 .resetPriceAlert(id);
         }
 
-        function renderPriceAlertsList() {
-            var el = document.getElementById('priceAlertsList');
+        function renderAlertListInto(elId, items) {
+            var el = document.getElementById(elId);
             if (!el) return;
 
-            if (!priceAlertsCache || priceAlertsCache.length === 0) {
+            if (!items || items.length === 0) {
                 el.innerHTML = '<p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Уведомлений пока нет.</p>';
                 return;
             }
 
-            el.innerHTML = priceAlertsCache.map(function(a) {
+            el.innerHTML = items.map(function(a) {
                 var name = escapeHtml(getCoinName(a.coin) || a.coin);
                 var sign = a.thresholdPct > 0 ? '+' : '';
                 var statusHtml = a.triggered
@@ -3536,6 +3656,89 @@
                     '<span class="sym">' + sign + a.thresholdPct + '%</span> · ' + statusHtml + '</span>' +
                     '<button type="button" title="Удалить" onclick="deletePriceAlertUi(\'' + jsEscape(a.id) + '\')">✕</button></div>';
             }).join('');
+        }
+
+        function renderPriceAlertsList() {
+            renderAlertListInto('priceAlertsList', priceAlertsCache);
+        }
+
+        function openAlertModal(coin) {
+            alertModalCoin = normalizeCoinKey(coin) || String(coin || '').toUpperCase().trim();
+            alertModalAvgBuy = 0;
+
+            var title = document.getElementById('alertModalTitle');
+            if (title) title.textContent = '🔔 Уведомления — ' + getCoinName(alertModalCoin);
+
+            var info = document.getElementById('alertModalPriceInfo');
+            var priceInput = document.getElementById('alertModalPriceInput');
+            var snap = getChartCoinSnapshot(alertModalCoin);
+            if (snap && snap.h && snap.h.avgBuy > 0) {
+                alertModalAvgBuy = snap.h.avgBuy;
+                if (info) info.textContent = formatPrice(snap.h.avgBuy) + ' → ' + (snap.currentPrice !== null ? formatPrice(snap.currentPrice) : 'нет данных');
+                if (priceInput) { priceInput.disabled = false; priceInput.placeholder = 'напр. ' + priceInputValue(snap.h.avgBuy * 1.2); }
+            } else {
+                if (info) info.textContent = 'Нет открытой позиции с точкой входа';
+                if (priceInput) { priceInput.disabled = true; priceInput.placeholder = 'Нет точки входа — задайте % вручную'; }
+            }
+
+            document.getElementById('alertModalPctInput').value = '';
+            if (priceInput) priceInput.value = '';
+            renderAlertModalList();
+
+            document.getElementById('alertModal').classList.add('active');
+            document.body.classList.add('modal-open');
+        }
+
+        function onAlertModalPctInput() {
+            var pctInput = document.getElementById('alertModalPctInput');
+            var priceInput = document.getElementById('alertModalPriceInput');
+            var pct = parseFloat(pctInput.value);
+            if (alertModalAvgBuy > 0 && !isNaN(pct)) {
+                priceInput.value = priceInputValue(alertModalAvgBuy * (1 + pct / 100));
+            }
+        }
+
+        function onAlertModalPriceInput() {
+            var pctInput = document.getElementById('alertModalPctInput');
+            var priceInput = document.getElementById('alertModalPriceInput');
+            var price = parseFloat(priceInput.value);
+            if (alertModalAvgBuy > 0 && !isNaN(price) && price >= 0) {
+                pctInput.value = parseFloat((((price - alertModalAvgBuy) / alertModalAvgBuy) * 100).toFixed(2));
+            }
+        }
+
+        function closeAlertModal() {
+            document.getElementById('alertModal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+        }
+
+        function renderAlertModalList() {
+            if (!alertModalCoin) return;
+            var items = priceAlertsCache.filter(function(a) { return normalizeCoinKey(a.coin) === alertModalCoin; });
+            renderAlertListInto('alertModalList', items);
+        }
+
+        function addPriceAlertForModalCoin() {
+            var pctInput = document.getElementById('alertModalPctInput');
+            var pct = parseFloat(pctInput.value);
+
+            if (!alertModalCoin) { showToast('Монета не определена', 'error'); return; }
+            if (isNaN(pct) || pct === 0) { showToast('Укажите ненулевой процент (например, 20 или -10)', 'error'); return; }
+
+            showLoading(true, 'Сохранение...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) {
+                        applyPriceAlertsResult(res);
+                        pctInput.value = '';
+                        showToast('Уведомление добавлено');
+                    } else {
+                        showToast(res && res.error ? res.error : 'Ошибка', 'error');
+                    }
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка сохранения', 'error'); })
+                .addPriceAlert(alertModalCoin, pct);
         }
 
         function getActivePortfolioCoins(holdings) {
@@ -4086,6 +4289,7 @@
             document.getElementById('swapFromSearch').value = '';
             document.getElementById('swapToSearch').value = '';
             document.getElementById('swapToCoinNew').value = '';
+            document.getElementById('swapTransferDrawdown').checked = false;
             document.getElementById('swapPreviewWrap').style.display = 'none';
 
             renderSwapPickerSide('from');
@@ -4287,7 +4491,12 @@
             var snapFrom = getChartCoinSnapshot(swapFromCoin);
             var hFrom = snapFrom ? snapFrom.h : null;
             var avgBuyFrom = (hFrom && !hFrom.isRecovered) ? hFrom.avgBuy : 0;
-            var realizedPnl = avgBuyFrom > 0 ? (fromPrice - avgBuyFrom) * fromAmount - fee : null;
+            var transferDrawdown = !!(document.getElementById('swapTransferDrawdown') &&
+                document.getElementById('swapTransferDrawdown').checked);
+            var transferredCost = avgBuyFrom > 0 ? avgBuyFrom * fromAmount : 0;
+            var realizedPnl = transferDrawdown
+                ? -fee
+                : (avgBuyFrom > 0 ? (fromPrice - avgBuyFrom) * fromAmount - fee : null);
 
             // Точка входа отдаваемой монеты после ЧАСТИЧНОЙ продажи — учёт по
             // средней цене: списываем долю "Вложено", соответствующую проданному
@@ -4295,7 +4504,8 @@
             // поэтому цена входа остатка не прыгает от случайной цены продажи.
             // Исключение — если этой же продажей выручка от всех продаж монеты
             // перекрывает всё вложенное: тогда капитал считается отбитым,
-            // а остаток — бесплатным (Вложено = 0).
+            // а остаток — бесплатным (Вложено = 0). При переносе просадки
+            // это исключение не применяется: вложения уезжают в другую монету.
             var hasExistingFrom = !!(hFrom && hFrom.amount > 0);
             var existingFromAmount = hFrom ? hFrom.amount : 0;
             var existingFromCost = hFrom ? hFrom.costBasis : 0;
@@ -4307,7 +4517,7 @@
 
             var totalBoughtFrom = hFrom ? hFrom.totalBought : 0;
             var newTotalSoldCashFrom = (hFrom ? hFrom.totalSoldCash : 0) + fromValue;
-            if (totalBoughtFrom > 0 && newTotalSoldCashFrom >= totalBoughtFrom - 0.000001) {
+            if (!transferDrawdown && totalBoughtFrom > 0 && newTotalSoldCashFrom >= totalBoughtFrom - 0.000001) {
                 newFromCost = 0;
             }
 
@@ -4319,8 +4529,10 @@
             var hasExistingTo = !!(hTo && hTo.amount > 0 && !hTo.isRecovered);
             var existingToAmount = hTo ? hTo.amount : 0;
             var existingToCost = hTo ? hTo.costBasis : 0;
+            var buyAccountingValue = (transferDrawdown && transferredCost > 0) ? transferredCost : toValue;
+            var buyAccountingPrice = toAmount > 0 ? buyAccountingValue / toAmount : 0;
             var newToAmount = existingToAmount + toAmount;
-            var newToAvgBuy = newToAmount > 0 ? (existingToCost + toValue) / newToAmount : 0;
+            var newToAvgBuy = newToAmount > 0 ? (existingToCost + buyAccountingValue) / newToAmount : 0;
 
             var fromLabel = getCoinSymbol(swapFromCoin) || getCoinName(swapFromCoin) || swapFromCoin;
             var toLabel = getCoinSymbol(swapToCoin) || getCoinName(swapToCoin) || swapToCoin;
@@ -4333,8 +4545,21 @@
                 html += '<div class="sim-row"><span>Разница в оценке сторон</span><strong>' +
                     (toValue >= fromValue ? '+' : '') + formatMoney(toValue - fromValue) + '</strong></div>';
             }
-            html += '<div class="sim-row"><span>Реализованный P&L по ' + fromLabel + '</span><strong>' +
-                (realizedPnl === null ? '—' : (realizedPnl >= 0 ? '+' : '') + formatMoney(realizedPnl)) + '</strong></div>';
+            if (transferDrawdown) {
+                if (transferredCost <= 0) {
+                    html += '<div class="sim-row"><span>Перенос просадки</span><strong>недоступен — нет точки входа</strong></div>';
+                } else {
+                    html += '<div class="sim-row"><span>Перенос вложений</span><strong>' +
+                        formatMoney(transferredCost) + ' → ' + formatNumber(toAmount, 4) + ' ' + toLabel +
+                        ' по ' + formatPrice(buyAccountingPrice) + '</strong></div>';
+                    html += '<div class="sim-row"><span>Реализованный P&L по ' + fromLabel + '</span><strong>' +
+                        (fee > 0 ? 'комиссия ' + formatMoney(-fee) + ' · убыток перенесён' : 'не фиксируется, перенесён') +
+                        '</strong></div>';
+                }
+            } else {
+                html += '<div class="sim-row"><span>Реализованный P&L по ' + fromLabel + '</span><strong>' +
+                    (realizedPnl === null ? '—' : (realizedPnl >= 0 ? '+' : '') + formatMoney(realizedPnl)) + '</strong></div>';
+            }
             html += '<div class="sim-row"><span>Точка входа ' + fromLabel + '</span><strong>' +
                 (hasExistingFrom ? formatPrice(hFrom.avgBuy) + ' → ' : '') +
                 (fromFullySold ? 'продано полностью' : formatPrice(newFromAvgBuy)) + '</strong></div>';
@@ -4384,23 +4609,34 @@
             var toValue = toAmount * toPrice;
             var fromSymbol = getCoinSymbol(swapFromCoin) || swapFromCoin;
             var toSymbol = getCoinSymbol(swapToCoin) || swapToCoin;
+            var transferDrawdown = !!(document.getElementById('swapTransferDrawdown') &&
+                document.getElementById('swapTransferDrawdown').checked);
+
+            if (transferDrawdown) {
+                var fromH = globalHoldings[swapFromCoin];
+                var fromAvg = fromH && !fromH.isRecovered ? fromH.avgBuy : 0;
+                if (!(fromAvg > 0)) {
+                    showToast('Нельзя перенести просадку: у отдаваемой монеты нет точки входа', 'error');
+                    return;
+                }
+            }
 
             var payload = {
                 date: date,
                 fee: fee,
+                note: note,
+                transferDrawdown: transferDrawdown,
                 sell: {
                     coin: swapFromCoin,
                     amount: fromAmount,
                     price: fromPrice,
-                    total: fromValue,
-                    note: note || ('Ребалансировка → ' + toSymbol)
+                    total: fromValue
                 },
                 buy: {
                     coin: swapToCoin,
                     amount: toAmount,
                     price: toPrice,
-                    total: toValue,
-                    note: note || ('Ребалансировка ← ' + fromSymbol)
+                    total: toValue
                 }
             };
 
@@ -4409,7 +4645,8 @@
                 .withSuccessHandler(function(result) {
                     showLoading(false);
                     if (result && result.success) {
-                        showToast('Ребалансировка ' + fromSymbol + ' → ' + toSymbol + ' сохранена!');
+                        showToast((transferDrawdown ? 'Просадка перенесена: ' : 'Ребалансировка ') +
+                            fromSymbol + ' → ' + toSymbol + (transferDrawdown ? '' : ' сохранена!'));
                         closeSwapModal();
                         refreshData();
                     } else {
@@ -5076,14 +5313,24 @@
                     // продажи). Прибыль/убыток от самой сделки фиксируется
                     // отдельно, в реализованный P&L, и не "размазывается" на
                     // оставшуюся позицию.
+                    //
+                    // Исключение — ребалансировка с переносом просадки: убыток
+                    // не фиксируется (кроме комиссии), выручка не идёт в
+                    // «капитал отбит», потому что исходные вложения переезжают
+                    // в купленную монету.
                     var avgBeforeSale = h.amount > 0 ? h.costBasis / h.amount : 0;
                     var soldAmount = Math.min(tx.amount, h.amount);
                     var costRemoved = avgBeforeSale * soldAmount;
-                    var realizedForSale = (tx.price - avgBeforeSale) * soldAmount - (tx.fee || 0);
+                    var isDrawdownSwap = isDrawdownSwapNote(tx.note);
+                    var realizedForSale = isDrawdownSwap
+                        ? -(tx.fee || 0)
+                        : (tx.price - avgBeforeSale) * soldAmount - (tx.fee || 0);
 
                     h.amount -= tx.amount;
                     h.costBasis = Math.max(0, h.costBasis - costRemoved);
-                    h.totalSoldCash += tx.total;
+                    if (!isDrawdownSwap) {
+                        h.totalSoldCash += tx.total;
+                    }
                     h.sold += tx.total;
                     h.realizedPnL += realizedForSale;
                     totalRealizedPnL += realizedForSale;
@@ -5481,7 +5728,10 @@
                             '<div><div class="coin-name">' + displayName + '</div>' +
                             '<div class="coin-sub mono">' + subParts.join(' · ') + '</div></div>' +
                         '</div>' +
-                        '<button type="button" class="coin-action-btn" onclick="event.stopPropagation();openModal(\'' + jsEscape(coin) + '\')" title="Новая сделка">+</button>' +
+                        '<div class="coin-action-group">' +
+                            '<button type="button" class="coin-action-btn" onclick="event.stopPropagation();openAlertModal(\'' + jsEscape(coin) + '\')" title="Уведомления по цене">🔔</button>' +
+                            '<button type="button" class="coin-action-btn" onclick="event.stopPropagation();openModal(\'' + jsEscape(coin) + '\')" title="Новая сделка">+</button>' +
+                        '</div>' +
                     '</div></td>' +
                     '<td data-label="Текущая цена">' + formatCurrentPrice(coin) + '</td>' +
                     '<td data-label="Ср. вход"><div class="mono" style="font-weight:500">' + avgBuyHtml + '</div></td>' +
@@ -5548,8 +5798,14 @@
             var n = String(note || '');
             // Поддерживаем и новый текст ("Ребалансировка"), и старый ("Обмен") —
             // на случай сделок, сохранённых до переименования кнопки.
-            return n.indexOf('Ребалансировка → ') === 0 || n.indexOf('Ребалансировка ← ') === 0 ||
-                n.indexOf('Обмен → ') === 0 || n.indexOf('Обмен ← ') === 0;
+            // «Ребалансировка (просадка) →» тоже начинается с «Ребалансировка».
+            return n.indexOf('Ребалансировка') === 0 ||
+                n.indexOf('Обмен → ') === 0 ||
+                n.indexOf('Обмен ← ') === 0;
+        }
+
+        function isDrawdownSwapNote(note) {
+            return String(note || '').indexOf('Ребалансировка (просадка)') === 0;
         }
 
         function renderTable() {
@@ -5569,16 +5825,21 @@
                 else { badge = 'badge-sell'; label = 'Продажа'; }
 
                 var isSwap = isSwapNote(tx.note);
+                var isDrawdown = isDrawdownSwapNote(tx.note);
                 if (isSwap) badge = 'badge-swap';
 
                 var pnl = tx.pnl || 0;
                 var pnlClass = pnl >= 0 ? 'pnl-up' : 'pnl-down';
-                var pnlText = tx.type === 'Продажа' ? formatMoney(pnl) : '—';
+                var pnlText = '—';
+                if (tx.type === 'Продажа') {
+                    pnlText = isDrawdown ? 'перенесён' : formatMoney(pnl);
+                    if (isDrawdown) pnlClass = '';
+                }
                 var priceText = tx.type === 'Аирдроп' ? 'Бесплатно' : (tx.type === 'Скам' ? '$0' : formatPrice(tx.price));
                 var totalText = tx.type === 'Аирдроп' ? '—' : formatMoney(tx.total);
                 var amountText = tx.type === 'Скам' ? '—' : formatNumber(tx.amount, 5);
                 var typeNoteHtml = isSwap
-                    ? '<div class="swap-note-tag">🔄 ' + escapeHtml(tx.note) + '</div>'
+                    ? '<div class="swap-note-tag">' + (isDrawdown ? '⤵ ' : '🔄 ') + escapeHtml(tx.note) + '</div>'
                     : (tx.note ? '<div class="swap-note-tag">' + escapeHtml(tx.note) + '</div>' : '');
 
                 html += '<tr>' +
