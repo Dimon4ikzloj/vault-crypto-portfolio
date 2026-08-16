@@ -407,8 +407,117 @@
             align-items: start;
         }
 
+        .col-left,
+        .col-right {
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .col-left > .card:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Правая колонка не раздувает сетку: высоту задаёт левая (история). */
+        .col-right {
+            height: 0;
+            min-height: 100%;
+            overflow: hidden;
+        }
+
+        .col-right .allocation-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 0;
+            min-height: 0;
+            height: 100%;
+            max-height: 100%;
+            overflow: hidden;
+        }
+
+        .tools-section {
+            margin-top: 20px;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        .tools-banner .card-body-pad {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .tools-banner .promo-icon {
+            margin-bottom: 0;
+            flex-shrink: 0;
+        }
+
+        .tools-banner .promo-copy { min-width: 0; }
+
+        .tools-grid > .card {
+            margin-bottom: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            height: 100%;
+        }
+
+        .tools-grid > .card .card-header {
+            flex-shrink: 0;
+        }
+
+        .tools-grid > .card .card-body-pad,
+        .tools-grid > .card .risk-widget,
+        .tools-grid > .card .perf-chart {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .tools-grid > .card .card-body-pad {
+            overflow: auto;
+        }
+
+        .tools-grid .risk-widget {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .tools-grid .perf-chart {
+            min-height: 220px;
+            height: auto;
+            padding-bottom: 24px;
+        }
+
+        .tools-grid > .card:nth-child(-n+2) {
+            min-height: 300px;
+        }
+
         @media (max-width: 1100px) {
-            .dashboard-grid { grid-template-columns: 1fr; }
+            .dashboard-grid,
+            .tools-grid { grid-template-columns: 1fr; }
+
+            .col-left > .card:last-child {
+                margin-bottom: 20px;
+            }
+
+            .col-right .allocation-card {
+                flex: none;
+                height: auto;
+                max-height: none;
+            }
+
+            .col-right {
+                height: auto;
+                min-height: 0;
+                overflow: visible;
+            }
         }
 
         /* ── Portfolio hero ── */
@@ -874,17 +983,26 @@
         }
 
         /* ── Right column widgets ── */
+        .allocation-card .card-header {
+            flex-shrink: 0;
+        }
+
         .allocation-card .card-body {
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 16px 24px 24px;
+            padding: 16px 20px 20px;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
         }
 
         .donut-wrap {
             position: relative;
             width: 200px;
             height: 200px;
+            flex-shrink: 0;
+            overflow: hidden;
         }
 
         .donut-center {
@@ -911,13 +1029,46 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            flex: 1;
+            min-height: 0;
+            overflow-x: hidden;
+            overflow-y: auto;
+            align-self: stretch;
+            padding-right: 2px;
+        }
+
+        .legend::-webkit-scrollbar { width: 6px; }
+        .legend::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.14);
+            border-radius: 6px;
+        }
+
+        .allocation-card #allocationEmpty {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         .legend-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 8px;
             font-size: 12px;
+            min-width: 0;
+        }
+
+        .legend-item .legend-left,
+        .legend-item .legend-left span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .legend-item .mono {
+            flex-shrink: 0;
         }
 
         .legend-left { display: flex; align-items: center; gap: 8px; }
@@ -1511,7 +1662,7 @@
             cursor: pointer;
             border-radius: 8px;
             padding: 4px 6px;
-            margin: -4px -6px;
+            margin: 0;
             transition: background 0.2s;
         }
 
@@ -1661,7 +1812,7 @@
             font-size: 16px;
         }
 
-        #home, #positions, #history, #settingsPanel {
+        #home, #positions, #history, #settingsPanel, #workspaceTools {
             scroll-margin-top: 68px;
         }
 
@@ -1694,6 +1845,26 @@
         html.mobile-layout .page-content {
             padding: 16px 16px calc(88px + env(safe-area-inset-bottom));
         }
+
+        html.mobile-layout .tools-section { margin-top: 16px; }
+        html.mobile-layout .tools-grid { gap: 16px; }
+        html.mobile-layout .col-left > .card:last-child { margin-bottom: 16px; }
+        html.mobile-layout .col-right {
+            height: auto;
+            min-height: 0;
+            overflow: visible;
+        }
+        html.mobile-layout .col-right .allocation-card {
+            flex: none;
+            height: auto !important;
+            max-height: none !important;
+        }
+        html.mobile-layout .allocation-card .legend {
+            flex: none;
+            overflow: visible;
+            max-height: none;
+        }
+        html.mobile-layout .tools-grid > .card:nth-child(-n+2) { min-height: 0; }
 
         html.mobile-layout .card {
             border-radius: var(--radius-md);
@@ -2345,16 +2516,22 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
 
+                <section class="tools-section" id="workspaceTools">
                         <!-- Live Prices promo -->
-                        <div class="card promo-card">
+                        <div class="card promo-card tools-banner">
                             <div class="card-body-pad">
                                 <div class="promo-icon">⚡</div>
+                                <div class="promo-copy">
                                 <div class="promo-title">Котировки CMC</div>
                                 <div class="promo-text" id="priceCacheStatus">Цены из кэша. Имена монет сохраняются навсегда после первой синхронизации. API — раз в 4 ч.</div>
+                                </div>
                             </div>
                         </div>
 
+                    <div class="tools-grid">
                         <!-- Risk Analysis -->
                         <div class="card">
                             <div class="card-header">
@@ -2470,7 +2647,7 @@
                                 <div class="card-title">🔔 Уведомления по цене</div>
                             </div>
                             <div class="card-body-pad">
-                                <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Письмо на email, когда цена монеты изменится на заданный % от вашей точки входа. Проверка идёт раз в час тем же серверным триггером, что обновляет цены — работает, даже если приложение закрыто. Настоящие push-уведомления Google Apps Script не поддерживает.</p>
+                                <p style="font-size:11px;color:var(--text-muted);margin-bottom:12px;">Уведомление, когда цена монеты изменится на заданный % от точки входа. Проверка раз в час тем же триггером, что обновляет цены — работает, даже если приложение закрыто. Можно слать на email, в ваш Telegram-бот или в оба места. Кто найдёт бота поиском, ваши алерты не увидит: они уходят только в привязанный чат.</p>
                                 <div class="form-group">
                                     <label class="form-label">Email для уведомлений</label>
                                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -2479,6 +2656,23 @@
                                         <button type="button" class="btn btn-outline" onclick="sendTestAlertEmailUi()" title="Отправить тестовое письмо на этот адрес">✉ Тест</button>
                                     </div>
                                     <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0;">Первый раз Google спросит разрешение на почту: в Apps Script выберите <strong>authorizeSendMail</strong> → ▶ Выполнить → Разрешить. Из браузера это окно само не открывается.</p>
+                                </div>
+                                <div class="form-group" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                                    <label class="form-label">Telegram-бот</label>
+                                    <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px;">Chat ID из @userinfobot <strong>не сработает</strong>, пока вы не нажмёте Start именно <em>своему</em> боту. Надёжный способ: очистите Chat ID, нажмите «Подключить чат» и сразу напишите /start своему боту — не @userinfobot и не число из токена (до двоеточия).</p>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <input type="password" class="form-input" id="telegramBotTokenInput" placeholder="123456789:AAH..." autocomplete="off" style="flex:1;min-width:160px;">
+                                        <button type="button" class="btn btn-secondary" onclick="saveTelegramBotTokenUi()">Сохранить токен</button>
+                                    </div>
+                                    <p id="telegramBotStatus" style="font-size:11px;color:var(--text-muted);margin:8px 0;">Бот не подключён.</p>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                                        <input type="text" class="form-input" id="telegramChatIdInput" placeholder="Chat ID (необязательно)" inputmode="numeric" style="flex:1;min-width:140px;">
+                                    </div>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="connectTelegramChatUi()">Подключить чат</button>
+                                        <button type="button" class="btn btn-outline btn-sm" onclick="sendTestTelegramAlertUi()">✈ Тест в Telegram</button>
+                                        <button type="button" class="btn btn-ghost btn-sm" onclick="disconnectTelegramBotUi()">Отключить</button>
+                                    </div>
                                 </div>
                                 <div class="form-group" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
                                     <label class="form-label">Новое уведомление</label>
@@ -2499,7 +2693,7 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
     </div>
@@ -2753,7 +2947,7 @@
                     <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Можно ввести либо процент, либо сразу целевую цену — второе поле посчитается само. Положительный % — уведомить при росте, отрицательный — при падении. Письмо придёт на адрес из настроек ниже.</p>
                 </div>
                 <div id="alertModalList" class="tv-override-list" style="margin-top:14px;"></div>
-                <p style="font-size:11px;color:var(--text-muted);margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">Email для писем и полный список уведомлений — в карточке «🔔 Уведомления по цене» в настройках справа.</p>
+                <p style="font-size:11px;color:var(--text-muted);margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">Email, Telegram и полный список уведомлений — в карточке «🔔 Уведомления по цене» под историей сделок.</p>
             </div>
         </div>
     </div>
@@ -3540,6 +3734,113 @@
                 })
                 .withFailureHandler(function() {})
                 .getAlertEmail();
+
+            google.script.run
+                .withSuccessHandler(renderTelegramBotStatus)
+                .withFailureHandler(function() {})
+                .getTelegramBotStatus();
+        }
+
+        function renderTelegramBotStatus(status) {
+            var el = document.getElementById('telegramBotStatus');
+            var input = document.getElementById('telegramBotTokenInput');
+            if (!el) return;
+            if (!status || !status.hasToken) {
+                el.textContent = 'Бот не подключён.';
+                if (input) input.placeholder = '123456789:AAH...';
+                return;
+            }
+            if (input && status.tokenHint) input.placeholder = 'сохранён ' + status.tokenHint;
+            if (status.connected) {
+                el.textContent = 'Подключено' +
+                    (status.botUsername ? (' · @' + status.botUsername) : '') +
+                    (status.chatLabel ? (' → ' + status.chatLabel) : '') +
+                    '. Алерты только в этот чат.';
+            } else {
+                el.textContent = 'Токен сохранён' +
+                    (status.botUsername ? (' · @' + status.botUsername) : '') +
+                    (status.tokenHint ? (' ' + status.tokenHint) : '') +
+                    '. Напишите боту /start и нажмите «Подключить чат».';
+            }
+        }
+
+        function saveTelegramBotTokenUi() {
+            var input = document.getElementById('telegramBotTokenInput');
+            var token = (input && input.value || '').trim();
+            if (!token) { showToast('Вставьте токен от @BotFather', 'error'); return; }
+            showLoading(true, 'Проверка токена...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) {
+                        if (input) input.value = '';
+                        renderTelegramBotStatus(res.status);
+                        showToast(res.message || 'Токен сохранён');
+                    } else {
+                        showToast(res && res.error ? res.error : 'Не удалось сохранить токен', 'error');
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка Telegram: ' + ((err && err.message) || err), 'error');
+                })
+                .saveTelegramBotToken(token);
+        }
+
+        function connectTelegramChatUi() {
+            var chatIdEl = document.getElementById('telegramChatIdInput');
+            var chatId = (chatIdEl && chatIdEl.value || '').trim();
+            showLoading(true, chatId ? 'Привязка Chat ID...' : 'Ждём /start в боте (до 20 сек)...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.status) renderTelegramBotStatus(res.status);
+                    if (res && res.success) {
+                        if (chatIdEl) chatIdEl.value = '';
+                        showToast(res.message || 'Чат подключён');
+                    } else {
+                        var errText = res && res.error ? res.error : 'Не удалось подключить чат';
+                        if (chatIdEl && /chat not found|не знает этот чат|не видит ваш чат/i.test(errText)) {
+                            chatIdEl.value = '';
+                        }
+                        showToast(errText, 'error');
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка Telegram: ' + ((err && err.message) || err), 'error');
+                })
+                .connectTelegramChat(chatId);
+        }
+
+        function sendTestTelegramAlertUi() {
+            showLoading(true, 'Отправка в Telegram...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.status) renderTelegramBotStatus(res.status);
+                    if (res && res.success) showToast('Тестовое сообщение отправлено в Telegram');
+                    else showToast(res && res.error ? res.error : 'Не удалось отправить в Telegram', 'error');
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Ошибка Telegram: ' + ((err && err.message) || err), 'error');
+                })
+                .sendTestTelegramAlert();
+        }
+
+        function disconnectTelegramBotUi() {
+            showLoading(true, 'Отключение бота...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    var input = document.getElementById('telegramBotTokenInput');
+                    if (input) { input.value = ''; input.placeholder = '123456789:AAH...'; }
+                    renderTelegramBotStatus(res && res.status);
+                    showToast('Telegram-бот отключён');
+                })
+                .withFailureHandler(function() { showLoading(false); showToast('Ошибка отключения', 'error'); })
+                .disconnectTelegramBot();
         }
 
         function saveAlertEmailUi() {
@@ -4062,6 +4363,33 @@
         function toggleCollapsibleCard(el) {
             var card = el.closest('.collapsible-card');
             if (card) card.classList.toggle('expanded');
+            scheduleAllocationHeightSync();
+        }
+
+        function isStackedDashboard() {
+            return window.innerWidth <= 1100 || document.documentElement.classList.contains('mobile-layout');
+        }
+
+        function syncAllocationCardHeight() {
+            var left = document.querySelector('.dashboard-grid .col-left');
+            var card = document.querySelector('.allocation-card');
+            if (!left || !card) return;
+            if (isStackedDashboard()) {
+                card.style.height = '';
+                card.style.maxHeight = '';
+                return;
+            }
+            var h = Math.round(left.getBoundingClientRect().height);
+            if (h > 40) {
+                card.style.height = h + 'px';
+                card.style.maxHeight = h + 'px';
+            }
+        }
+
+        function scheduleAllocationHeightSync() {
+            requestAnimationFrame(function() {
+                requestAnimationFrame(syncAllocationCardHeight);
+            });
         }
 
         function toggleChartInfoPanel() {
@@ -5867,6 +6195,7 @@
             renderRisk(portfolio);
             renderPerfChart(portfolio);
             renderTable();
+            scheduleAllocationHeightSync();
         }
 
         loadSetupInfo();
@@ -5887,8 +6216,24 @@
                 document.documentElement.classList.toggle('narrow', w <= 380);
             }
             updateMobileLayout();
-            window.addEventListener('resize', updateMobileLayout);
-            window.addEventListener('orientationchange', updateMobileLayout);
+            window.addEventListener('resize', function() {
+                updateMobileLayout();
+                scheduleAllocationHeightSync();
+            });
+            window.addEventListener('orientationchange', function() {
+                updateMobileLayout();
+                scheduleAllocationHeightSync();
+            });
+            if (typeof ResizeObserver === 'function') {
+                var leftCol = document.querySelector('.dashboard-grid .col-left');
+                if (leftCol) {
+                    var allocResizeTimer = null;
+                    new ResizeObserver(function() {
+                        clearTimeout(allocResizeTimer);
+                        allocResizeTimer = setTimeout(syncAllocationCardHeight, 50);
+                    }).observe(leftCol);
+                }
+            }
         })();
 
         (function initMobileNavObserver() {

@@ -2591,14 +2591,18 @@ function updateAllCoins() {
 
 /**
  * ─── Уведомления по цене (% от точки входа) ───
- * Идут по email (MailApp), а не push-уведомлениями: Apps Script не может
- * держать рабочий Service Worker (см. регистрацию в index.html), поэтому
- * настоящие push-уведомления, приходящие при закрытом приложении, здесь
- * технически невозможны. Проверка идёт из updateAllCoins() — это почасовой
- * серверный триггер, который срабатывает сам по себе, без открытого браузера.
+ * Идут по email (MailApp) и/или в личный Telegram-бот пользователя.
+ * Токен бота вводится в UI и хранится в свойствах скрипта, не в коде.
+ * Сообщения отправляются только на сохранённый chat_id — посторонний,
+ * нашедший бота поиском, алерты не получает. Проверка идёт из
+ * updateAllCoins() — почасовой серверный триггер без открытого браузера.
  */
 const PRICE_ALERTS_PROP = 'PRICE_ALERTS_LIST';
 const ALERT_EMAIL_PROP = 'PRICE_ALERT_EMAIL';
+const TELEGRAM_BOT_TOKEN_PROP = 'TELEGRAM_BOT_TOKEN';
+const TELEGRAM_CHAT_ID_PROP = 'TELEGRAM_CHAT_ID';
+const TELEGRAM_BOT_USERNAME_PROP = 'TELEGRAM_BOT_USERNAME';
+const TELEGRAM_CHAT_LABEL_PROP = 'TELEGRAM_CHAT_LABEL';
 
 function getPriceAlerts() {
   const saved = PropertiesService.getUserProperties().getProperty(PRICE_ALERTS_PROP);
@@ -2636,6 +2640,318 @@ function saveAlertEmail(email) {
   }
   PropertiesService.getUserProperties().setProperty(ALERT_EMAIL_PROP, clean);
   return { success: true, email: clean };
+}
+
+function maskTelegramToken_(token) {
+  const raw = String(token || '');
+  if (raw.length < 8) return '';
+  return '••••' + raw.slice(-4);
+}
+
+function normalizeTelegramToken_(token) {
+  return String(token || '').replace(/\s+/g, '').trim();
+}
+
+function isValidTelegramToken_(token) {
+  return /^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(normalizeTelegramToken_(token));
+}
+
+function getTelegramSettings_() {
+  const props = PropertiesService.getUserProperties();
+  return {
+    token: props.getProperty(TELEGRAM_BOT_TOKEN_PROP) || '',
+    chatId: props.getProperty(TELEGRAM_CHAT_ID_PROP) || '',
+    botUsername: props.getProperty(TELEGRAM_BOT_USERNAME_PROP) || '',
+    chatLabel: props.getProperty(TELEGRAM_CHAT_LABEL_PROP) || ''
+  };
+}
+
+function telegramStatusFromSettings_(settings) {
+  const s = settings || getTelegramSettings_();
+  return {
+    hasToken: !!s.token,
+    tokenHint: s.token ? maskTelegramToken_(s.token) : '',
+    botUsername: s.botUsername || '',
+    chatId: s.chatId || '',
+    chatLabel: s.chatLabel || '',
+    connected: !!(s.token && s.chatId)
+  };
+}
+
+function getTelegramBotStatus() {
+  return telegramStatusFromSettings_(getTelegramSettings_());
+}
+
+function telegramApi_(token, method, payload) {
+  const cleanToken = normalizeTelegramToken_(token);
+  const methodName = String(method || '').split('?')[0];
+  const url = 'https://api.telegram.org/bot' + cleanToken + '/' + methodName;
+  const options = {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload || {}),
+    muteHttpExceptions: true,
+    followRedirects: true
+  };
+  const response = UrlFetchApp.fetch(url, options);
+  let body = {};
+  try {
+    body = JSON.parse(response.getContentText() || '{}');
+  } catch (e) {
+    throw new Error('Telegram вернул не JSON (HTTP ' + response.getResponseCode() + ')');
+  }
+  if (!body.ok) {
+    throw new Error(body.description || ('Telegram: ошибка ' + response.getResponseCode()));
+  }
+  return body.result;
+}
+
+function telegramChatLabel_(chat) {
+  if (!chat) return '';
+  if (chat.username) return '@' + chat.username;
+  const name = [chat.first_name, chat.last_name].filter(Boolean).join(' ').trim();
+  return name || ('чат ' + chat.id);
+}
+
+function chatFromTelegramUpdate_(upd) {
+  if (!upd) return null;
+  const msg = upd.message || upd.edited_message;
+  if (msg && msg.chat) {
+    return { chat: msg.chat, text: String(msg.text || ''), source: 'message' };
+  }
+  const member = upd.my_chat_member;
+  if (member && member.chat) {
+    const status = member.new_chat_member && member.new_chat_member.status;
+    return {
+      chat: member.chat,
+      text: (status === 'member' || status === 'restricted') ? '/start' : String(status || ''),
+      source: 'my_chat_member'
+    };
+  }
+  return null;
+}
+
+function pickPrivateTelegramChat_(updates) {
+  let found = null;
+  let foundStart = null;
+  (updates || []).forEach(function(upd) {
+    const parsed = chatFromTelegramUpdate_(upd);
+    if (!parsed || !parsed.chat || parsed.chat.type !== 'private') return;
+    found = parsed.chat;
+    if (String(parsed.text || '').indexOf('/start') === 0) foundStart = parsed.chat;
+  });
+  return foundStart || found;
+}
+
+function fetchTelegramUpdates_(token) {
+  telegramApi_(token, 'deleteWebhook', { drop_pending_updates: false });
+  const allowed = ['message', 'edited_message', 'my_chat_member'];
+  let updates = telegramApi_(token, 'getUpdates', {
+    limit: 100,
+    timeout: 0,
+    allowed_updates: allowed
+  }) || [];
+  if (!updates.length) {
+    updates = telegramApi_(token, 'getUpdates', {
+      limit: 100,
+      timeout: 0,
+      allowed_updates: allowed
+    }) || [];
+  }
+  if (!updates.length) {
+    updates = telegramApi_(token, 'getUpdates', {
+      limit: 100,
+      timeout: 20,
+      allowed_updates: allowed
+    }) || [];
+  }
+  return updates;
+}
+
+function bindTelegramChat_(token, chat) {
+  const props = PropertiesService.getUserProperties();
+  props.setProperty(TELEGRAM_CHAT_ID_PROP, String(chat.id));
+  props.setProperty(TELEGRAM_CHAT_LABEL_PROP, telegramChatLabel_(chat));
+  sendTelegramMessage_(
+    token,
+    chat.id,
+    'Vault подключён. Уведомления по цене будут приходить только в этот чат — тот, кто найдёт бота поиском, их не увидит.'
+  );
+  return {
+    success: true,
+    status: getTelegramBotStatus(),
+    message: 'Чат привязан: ' + telegramChatLabel_(chat) + '. Тестовое сообщение уже в Telegram.'
+  };
+}
+
+function parseTelegramChatId_(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  const m = s.replace(/\s/g, '').match(/-?\d{5,}/);
+  return m ? m[0] : '';
+}
+
+function isTelegramChatNotFound_(error) {
+  const msg = String((error && error.message) || error || '').toLowerCase();
+  return msg.indexOf('chat not found') !== -1 || msg.indexOf('bot was blocked') !== -1;
+}
+
+function botNumericIdFromToken_(token) {
+  const clean = normalizeTelegramToken_(token);
+  const part = clean.split(':')[0];
+  return /^\d+$/.test(part) ? part : '';
+}
+
+function sendTelegramMessage_(token, chatId, text) {
+  const trimmed = String(text || '').substring(0, 4000);
+  return telegramApi_(token, 'sendMessage', {
+    chat_id: String(chatId),
+    text: trimmed,
+    disable_web_page_preview: true
+  });
+}
+
+function tryBindTelegramChat_(token, chat, me) {
+  const botId = String((me && me.id) || botNumericIdFromToken_(token) || '');
+  if (botId && String(chat.id) === botId) {
+    return {
+      success: false,
+      error: 'Это ID самого бота, а не ваш. Нужен ваш личный ID. Проще: нажмите «Подключить чат» без Chat ID и сразу напишите /start своему боту' +
+        (me && me.username ? (' @' + me.username) : '') + '.'
+    };
+  }
+  try {
+    return bindTelegramChat_(token, chat);
+  } catch (e) {
+    if (!isTelegramChatNotFound_(e)) {
+      return { success: false, error: 'Не удалось написать в чат: ' + e.message };
+    }
+    return { success: false, notFound: true, error: e.message };
+  }
+}
+
+function connectByUpdatesOrWait_(token, me) {
+  let updates = [];
+  try {
+    updates = fetchTelegramUpdates_(token) || [];
+  } catch (e) {
+    return { success: false, error: 'Не удалось прочитать чаты бота: ' + e.message };
+  }
+  const found = pickPrivateTelegramChat_(updates);
+  if (found) return tryBindTelegramChat_(token, found, me);
+
+  const hint = me && me.username ? ('@' + me.username) : 'своему боту';
+  return {
+    success: false,
+    error: 'Бот ещё не видит ваш чат. Откройте именно ' + hint +
+      ' (не @userinfobot), нажмите Start или напишите любое слово и сразу снова «Подключить чат». Поле Chat ID не нужно, если вы пишете боту в этот момент.'
+  };
+}
+
+function saveTelegramBotToken(token) {
+  const clean = normalizeTelegramToken_(token);
+  if (!clean) {
+    return { success: false, error: 'Вставьте токен бота от @BotFather' };
+  }
+  if (!isValidTelegramToken_(clean)) {
+    return { success: false, error: 'Не похоже на токен бота. Он выглядит так: 123456789:AAH...' };
+  }
+
+  let me;
+  try {
+    me = telegramApi_(clean, 'getMe');
+  } catch (e) {
+    return { success: false, error: 'Telegram не принял токен: ' + e.message };
+  }
+
+  const props = PropertiesService.getUserProperties();
+  const prev = props.getProperty(TELEGRAM_BOT_TOKEN_PROP) || '';
+  props.setProperty(TELEGRAM_BOT_TOKEN_PROP, clean);
+  props.setProperty(TELEGRAM_BOT_USERNAME_PROP, me.username || '');
+  if (prev && prev !== clean) {
+    props.deleteProperty(TELEGRAM_CHAT_ID_PROP);
+    props.deleteProperty(TELEGRAM_CHAT_LABEL_PROP);
+  }
+
+  return {
+    success: true,
+    status: getTelegramBotStatus(),
+    message: me.username
+      ? ('Токен сохранён. Откройте @' + me.username + ' в Telegram, нажмите Start, затем «Подключить чат».')
+      : 'Токен сохранён. Напишите боту /start, затем нажмите «Подключить чат».'
+  };
+}
+
+function clearTelegramChatBinding_() {
+  const props = PropertiesService.getUserProperties();
+  props.deleteProperty(TELEGRAM_CHAT_ID_PROP);
+  props.deleteProperty(TELEGRAM_CHAT_LABEL_PROP);
+}
+
+function connectTelegramChat(chatIdOverride) {
+  const settings = getTelegramSettings_();
+  if (!settings.token) {
+    return { success: false, error: 'Сначала сохраните токен бота' };
+  }
+
+  let me;
+  try {
+    me = telegramApi_(settings.token, 'getMe');
+  } catch (e) {
+    return { success: false, error: 'Не удалось обратиться к боту: ' + e.message };
+  }
+
+  const props = PropertiesService.getUserProperties();
+  props.setProperty(TELEGRAM_BOT_USERNAME_PROP, me.username || '');
+
+  const manualId = parseTelegramChatId_(chatIdOverride);
+  if (String(chatIdOverride || '').trim() && !manualId) {
+    return { success: false, error: 'Не удалось разобрать Chat ID. Нужно число, например 123456789 — не токен и не @username.' };
+  }
+
+  if (manualId) {
+    const bound = tryBindTelegramChat_(settings.token, { id: manualId, first_name: 'чат ' + manualId }, me);
+    if (bound.success) return bound;
+    if (!bound.notFound) return bound;
+    clearTelegramChatBinding_();
+    const viaUpdates = connectByUpdatesOrWait_(settings.token, me);
+    if (viaUpdates.success) return viaUpdates;
+    return {
+      success: false,
+      error: 'Chat not found: бот не знает этот чат. Очистите поле Chat ID, нажмите «Подключить чат» и сразу напишите /start своему боту' +
+        (me.username ? (' @' + me.username) : '') +
+        '. Не вставляйте число из токена (до двоеточия) — это ID бота, не ваш.'
+    };
+  }
+
+  if (settings.chatId) {
+    try {
+      sendTelegramMessage_(
+        settings.token,
+        settings.chatId,
+        'Vault: чат уже привязан. Уведомления по цене будут приходить только сюда.'
+      );
+      return {
+        success: true,
+        status: getTelegramBotStatus(),
+        message: 'Чат уже привязан' + (settings.chatLabel ? (': ' + settings.chatLabel) : '') + '.'
+      };
+    } catch (e) {
+      // Старый ID (бота, userinfobot без /start и т.п.) — забываем и ловим свежий /start.
+      clearTelegramChatBinding_();
+    }
+  }
+
+  return connectByUpdatesOrWait_(settings.token, me);
+}
+
+function disconnectTelegramBot() {
+  const props = PropertiesService.getUserProperties();
+  props.deleteProperty(TELEGRAM_BOT_TOKEN_PROP);
+  props.deleteProperty(TELEGRAM_CHAT_ID_PROP);
+  props.deleteProperty(TELEGRAM_BOT_USERNAME_PROP);
+  props.deleteProperty(TELEGRAM_CHAT_LABEL_PROP);
+  return { success: true, status: getTelegramBotStatus() };
 }
 
 function escapeEmailHtml_(value) {
@@ -2827,6 +3143,59 @@ function buildPriceAlertEmail_(opts) {
   return { subject: subject, body: body, htmlBody: html };
 }
 
+function buildTelegramAlertText_(opts) {
+  const alert = opts.alert || {};
+  const h = opts.holding || {};
+  const coin = describeCoinForEmail_(alert.coin);
+  const isTest = !!opts.isTest;
+  const price = (typeof opts.price === 'number' && isFinite(opts.price)) ? opts.price : null;
+  const avgBuy = h.avgBuy > 0 ? h.avgBuy : 0;
+  const amount = h.amount > 0 ? h.amount : 0;
+  const costBasis = h.costBasis > 0 ? h.costBasis : 0;
+  const thresholdPct = parseFloat(alert.thresholdPct);
+  const isUp = thresholdPct > 0;
+  const targetPrice = avgBuy > 0 && isFinite(thresholdPct) ? avgBuy * (1 + thresholdPct / 100) : null;
+  const pnlPct = (avgBuy > 0 && price !== null) ? ((price - avgBuy) / avgBuy) * 100 : null;
+  const marketValue = (amount > 0 && price !== null) ? amount * price : null;
+  const unrealized = (marketValue !== null && costBasis > 0) ? (marketValue - costBasis) : null;
+  const execUrl = opts.execUrl || getWebAppExecUrl();
+  const whatHappened = !isFinite(thresholdPct)
+    ? 'Порог не задан.'
+    : (isUp
+      ? ('Цена выросла и пересекла порог ' + formatEmailPct_(thresholdPct) + ' от точки входа.')
+      : ('Цена упала и пробила порог ' + formatEmailPct_(thresholdPct) + ' от точки входа.'));
+
+  const lines = [
+    isTest ? 'Vault — тестовое уведомление' : 'Vault — сработало уведомление',
+    '',
+    coin.title || alert.coin || '—',
+    isTest
+      ? ('Пример: сработает, когда цена ' + (isUp ? 'вырастет на ' : 'упадёт на ') + formatEmailPct_(Math.abs(thresholdPct)) + ' от входа.')
+      : whatHappened,
+    '',
+    'Точка входа: ' + (avgBuy > 0 ? formatEmailMoney_(avgBuy) : 'нет позиции'),
+    'Сейчас: ' + (price !== null ? formatEmailMoney_(price) : 'нет данных') +
+      (pnlPct !== null ? ('  (' + formatEmailPct_(pnlPct) + ')') : ''),
+    'Цель порога: ' + (targetPrice !== null ? formatEmailMoney_(targetPrice) : '—'),
+    '',
+    'Количество: ' + (amount > 0 ? (formatEmailQty_(amount) + (coin.symbol ? (' ' + coin.symbol) : '')) : '—'),
+    'Вложено: ' + (costBasis > 0 ? formatEmailMoney_(costBasis) : '—'),
+    'Стоимость: ' + (marketValue !== null ? formatEmailMoney_(marketValue) : '—'),
+    'P&L: ' + (unrealized !== null
+      ? ((unrealized >= 0 ? '+' : '') + formatEmailMoney_(unrealized) + (pnlPct !== null ? (' (' + formatEmailPct_(pnlPct) + ')') : ''))
+      : '—'),
+    '',
+    'Тип: ' + (isUp ? 'рост' : 'падение') +
+      (isFinite(thresholdPct) ? (', порог ' + formatEmailPct_(thresholdPct)) : ''),
+    'ID: ' + (alert.id || '—'),
+    'Сработало: ' + (isTest ? 'это тест, алерт не отключён' : formatEmailDate_(opts.triggeredAt || Date.now())),
+    '',
+    'Одноразовое уведомление. Чтобы получить снова — ↻ в приложении.'
+  ];
+  if (execUrl) lines.push('Портфель: ' + execUrl);
+  return lines.join('\n');
+}
+
 function sendMail_(to, message) {
   MailApp.sendEmail({
     to: to,
@@ -2930,6 +3299,39 @@ function sendTestAlertEmail(email) {
     return { success: true, email: clean };
   } catch (e) {
     return { success: false, error: isMailAuthError_(e) ? formatMailAuthError_() : String(e) };
+  }
+}
+
+function sendTestTelegramAlert() {
+  const settings = getTelegramSettings_();
+  if (!settings.token) {
+    return { success: false, error: 'Сначала сохраните токен бота' };
+  }
+  if (!settings.chatId) {
+    return { success: false, error: 'Сначала напишите боту /start и нажмите «Подключить чат»' };
+  }
+
+  try {
+    const alerts = getPriceAlerts();
+    const holdings = computeHoldingsSnapshot_();
+    const sample = alerts.filter(function(a) { return a.enabled; })[0] || alerts[0] || {
+      id: 'test',
+      coin: '—',
+      thresholdPct: 20,
+      enabled: true,
+      triggered: false,
+      createdAt: Date.now()
+    };
+    const text = buildTelegramAlertText_({
+      isTest: true,
+      alert: sample,
+      holding: holdings[sample.coin] || {},
+      price: sample.coin && sample.coin !== '—' ? readCachedPrice(sample.coin) : null
+    });
+    sendTelegramMessage_(settings.token, settings.chatId, text);
+    return { success: true, status: getTelegramBotStatus() };
+  } catch (e) {
+    return { success: false, error: String(e.message || e) };
   }
 }
 
@@ -3050,7 +3452,10 @@ function checkPriceAlerts() {
 
   const holdings = computeHoldingsSnapshot_();
   const email = getAlertEmail();
+  const telegram = getTelegramSettings_();
   const execUrl = getWebAppExecUrl();
+  const canEmail = !!email;
+  const canTelegram = !!(telegram.token && telegram.chatId);
   let triggeredCount = 0;
 
   alerts.forEach(function(alert) {
@@ -3065,33 +3470,50 @@ function checkPriceAlerts() {
     const crossed = isUpAlert ? pnlPct >= alert.thresholdPct : pnlPct <= alert.thresholdPct;
     if (!crossed) return;
 
-    if (email) {
+    if (!canEmail && !canTelegram) return;
+
+    const triggeredAt = Date.now();
+    const message = buildPriceAlertEmail_({
+      isTest: false,
+      alert: alert,
+      holding: h,
+      price: price,
+      email: email,
+      execUrl: execUrl,
+      triggeredAt: triggeredAt
+    });
+    const telegramText = buildTelegramAlertText_({
+      isTest: false,
+      alert: alert,
+      holding: h,
+      price: price,
+      execUrl: execUrl,
+      triggeredAt: triggeredAt
+    });
+
+    let delivered = false;
+
+    if (canTelegram) {
       try {
-        const triggeredAt = Date.now();
-        const message = buildPriceAlertEmail_({
-          isTest: false,
-          alert: alert,
-          holding: h,
-          price: price,
-          email: email,
-          execUrl: execUrl,
-          triggeredAt: triggeredAt
-        });
+        sendTelegramMessage_(telegram.token, telegram.chatId, telegramText);
+        delivered = true;
+      } catch (e) {
+        Logger.log('checkPriceAlerts telegram error: ' + e);
+      }
+    }
+
+    if (canEmail) {
+      try {
         sendMail_(email, message);
-        alert.triggered = true;
-        alert.triggeredAt = triggeredAt;
-        triggeredCount++;
+        delivered = true;
       } catch (e) {
         Logger.log('checkPriceAlerts email error: ' + e);
-        if (!isMailAuthError_(e)) {
-          alert.triggered = true;
-          alert.triggeredAt = Date.now();
-          triggeredCount++;
-        }
       }
-    } else {
+    }
+
+    if (delivered) {
       alert.triggered = true;
-      alert.triggeredAt = Date.now();
+      alert.triggeredAt = triggeredAt;
       triggeredCount++;
     }
   });
