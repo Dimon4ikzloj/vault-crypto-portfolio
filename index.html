@@ -301,6 +301,57 @@
 
         .card-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
+        .swap-leg {
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            background: rgba(255, 255, 255, 0.02);
+            margin-bottom: 4px;
+        }
+
+        .swap-leg-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--cyan);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        .swap-arrow {
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin: 10px 0;
+        }
+
+        .swap-rate-box {
+            padding: 12px 14px;
+            border: 1px dashed var(--border-light);
+            border-radius: var(--radius-md);
+            background: rgba(45, 212, 191, 0.04);
+            margin: 10px 0;
+        }
+
+        .swap-rate-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .swap-rate-fixed {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .swap-rate-row .form-input {
+            flex: 1;
+            min-width: 0;
+        }
+
         .card-title-row {
             display: flex;
             align-items: center;
@@ -550,6 +601,19 @@
         /* ── Positions table ── */
         .table-wrap { overflow-x: auto; }
 
+        .positions-search-wrap {
+            padding: 14px 24px 10px;
+        }
+
+        .positions-search-wrap .form-input {
+            padding: 9px 12px;
+            font-size: 13px;
+        }
+
+        html.mobile-layout .positions-search-wrap {
+            padding: 12px 16px 8px;
+        }
+
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
         th {
@@ -706,6 +770,22 @@
         .badge-sell { background: var(--red-dim); color: var(--red); }
         .badge-airdrop { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
         .badge-scam { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+        .badge-swap { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+
+        .type-cell {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+        }
+
+        html.mobile-layout .type-cell { align-items: flex-end; }
+
+        .swap-note-tag {
+            font-size: 10px;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
         .price-live-tag {
             display: inline-block;
             margin-left: 6px;
@@ -2014,6 +2094,7 @@
                 <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span> <span>Портфель</span><span class="mobile-only" style="margin-left:6px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span></div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
+                    <button class="btn btn-outline btn-sm mobile-only" onclick="openSwapModal()" title="Ребалансировка">🔄</button>
                     <button class="btn btn-outline btn-sm mobile-only" onclick="syncPrices()" title="Синхронизировать">⟳</button>
                     <div class="search-box desktop-only">
                         <span style="color:var(--text-muted)">⌕</span>
@@ -2022,6 +2103,7 @@
                     <button class="icon-btn desktop-only" title="Уведомления">🔔</button>
                     <div class="avatar desktop-only"></div>
                     <button class="btn btn-outline btn-sm desktop-only" onclick="syncPrices()" title="Синхронизировать">⟳</button>
+                    <button class="btn btn-outline btn-sm desktop-only" onclick="openSwapModal()" title="Ребалансировка">🔄 Ребалансировка</button>
                     <button class="btn btn-primary btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
                 </div>
             </header>
@@ -2125,9 +2207,14 @@
                                     <div class="card-title">Позиции</div>
                                     <span class="collapsible-toggle-icon">▾</span>
                                 </div>
+                                <button class="btn btn-outline btn-sm desktop-only" onclick="openSwapModal()" title="Ребалансировка">🔄 Ребалансировка</button>
                                 <button class="btn btn-outline btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
                             </div>
-                            <div class="table-wrap collapsible-body">
+                            <div class="collapsible-body">
+                                <div class="positions-search-wrap">
+                                    <input type="text" id="positionsSearch" class="form-input" placeholder="Поиск монеты по названию, тикеру или UCID..." oninput="filterPositionsTable()">
+                                </div>
+                                <div class="table-wrap">
                                 <table class="responsive-table positions-table">
                                     <thead>
                                         <tr>
@@ -2151,6 +2238,7 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         </div>
 
@@ -2466,6 +2554,95 @@
         </div>
     </div>
 
+    <!-- Swap Modal (Ребалансировка) -->
+    <div class="modal-overlay" id="swapModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">🔄 Ребалансировка портфеля</div>
+                <button class="modal-close" onclick="closeSwapModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="swapForm" onsubmit="submitSwapForm(event)">
+                    <p style="font-size:11px;color:var(--text-muted);margin:0 0 14px;">Для конвертации одной монеты в другую напрямую (например, APT → NEAR) — без прохождения через $ на балансе. Записывается как обычная «Продажа» + «Покупка» с одной датой.</p>
+                    <div class="form-group">
+                        <label class="form-label">Дата</label>
+                        <input type="date" class="form-input" id="swapDate" autocomplete="off" oninput="swapDateTouched = true;" required>
+                    </div>
+
+                    <div class="swap-leg">
+                        <div class="swap-leg-title">Отдаю</div>
+                        <div class="form-group coin-picker-wrap">
+                            <input type="text" class="form-input coin-picker-search" id="swapFromSearch" placeholder="Поиск среди монет с балансом..." oninput="filterSwapPicker('from')">
+                            <div id="swapFromPicker" class="coin-picker-grid"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Количество</label>
+                                <input type="number" class="form-input" id="swapFromAmount" step="any" min="0" placeholder="0.00" oninput="recomputeSwapToAmountFromRate();updateSwapPreview();">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Цена за монету ($)</label>
+                                <input type="number" class="form-input" id="swapFromPrice" step="any" min="0" placeholder="0.00" oninput="updateSwapPreview()">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-outline btn-sm" onclick="fillSwapMaxAmount()">Отдать весь баланс</button>
+                    </div>
+
+                    <div class="swap-rate-box">
+                        <label class="form-label">Курс обмена с биржи (необязательно)</label>
+                        <div class="swap-rate-row">
+                            <span class="swap-rate-fixed">1 <span id="swapRateFromLabel">монета А</span> =</span>
+                            <input type="number" class="form-input" id="swapRate" step="any" min="0" placeholder="напр. 1.49002" oninput="onSwapRateInput()">
+                            <span class="swap-rate-fixed" id="swapRateToLabel">монета Б</span>
+                        </div>
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Если биржа (например, Binance Convert) сама показывает курс — впишите его сюда, и «Количество получено» посчитается автоматически.</p>
+                    </div>
+
+                    <div class="swap-leg">
+                        <div class="swap-leg-title">Получаю</div>
+                        <div class="form-group coin-picker-wrap">
+                            <input type="text" class="form-input coin-picker-search" id="swapToSearch" placeholder="Поиск монеты..." oninput="filterSwapPicker('to')">
+                            <div id="swapToPicker" class="coin-picker-grid"></div>
+                            <div class="coin-add-row">
+                                <input type="text" class="form-input" id="swapToCoinNew" placeholder="Нет в списке? UCID с CoinMarketCap (напр. 20947)">
+                                <button type="button" class="btn btn-secondary" onclick="saveNewSwapAsset()">+ В список</button>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Количество получено</label>
+                                <input type="number" class="form-input" id="swapToAmount" step="any" min="0" placeholder="0.00" oninput="onSwapToAmountInput()">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Цена за монету ($)</label>
+                                <input type="number" class="form-input" id="swapToPrice" step="any" min="0" placeholder="Авто по курсу" oninput="swapToPriceTouched = true; updateSwapPreview();">
+                            </div>
+                        </div>
+                        <p style="font-size:11px;color:var(--text-muted);margin-top:2px;">Цена подставляется автоматически по стоимости отданной монеты — поправьте вручную, если знаете точный курс/комиссию биржи.</p>
+                    </div>
+
+                    <div class="form-row" id="swapMetaFields">
+                        <div class="form-group">
+                            <label class="form-label">Комиссия ($)</label>
+                            <input type="number" class="form-input" id="swapFee" value="0" step="any" oninput="updateSwapPreview()">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Примечание</label>
+                            <input type="text" class="form-input" id="swapNote" placeholder="Необязательно">
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="swapPreviewWrap" style="display:none;">
+                        <label class="form-label" style="color:var(--cyan);">Итог обмена</label>
+                        <div class="chart-sim-result" id="swapPreviewResult"></div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-full">Сохранить обмен</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Chart Modal (TradingView) -->
     <div class="modal-overlay" id="chartModal">
         <div class="modal modal-chart">
@@ -2552,6 +2729,10 @@
         let selectedCoin = '';
         let editingTransactionId = null;
         let forceNoCoinSelected = false;
+        let swapFromCoin = '';
+        let swapToCoin = '';
+        let swapToPriceTouched = false;
+        let swapDateTouched = false;
         let selectedChartCoin = null;
         let portfolioTvWidget = null;
         let lastPortfolioChartCoinsKey = '';
@@ -2585,8 +2766,10 @@
             var today = todayIso();
             var qDate = document.getElementById('qDate');
             var mDate = document.getElementById('mDate');
+            var swapDate = document.getElementById('swapDate');
             if (qDate && !qDateTouched && qDate.value !== today) qDate.value = today;
             if (mDate && !mDateTouched && mDate.value !== today) mDate.value = today;
+            if (swapDate && !swapDateTouched && swapDate.value !== today) swapDate.value = today;
         }
 
         refreshDefaultTradeDates();
@@ -2666,9 +2849,16 @@
             if (e.target === document.getElementById('chartModal')) closeChartModal();
         });
 
+        document.getElementById('swapModal').addEventListener('click', function(e) {
+            if (e.target === document.getElementById('swapModal')) closeSwapModal();
+        });
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && document.getElementById('chartModal').classList.contains('active')) {
                 closeChartModal();
+            }
+            if (e.key === 'Escape' && document.getElementById('swapModal').classList.contains('active')) {
+                closeSwapModal();
             }
         });
 
@@ -2923,6 +3113,15 @@
                     var realizedPnl = existingAvgBuy > 0 ? (tradePrice - existingAvgBuy) * tradeAmount - fee : null;
                     newAmount = existingAmount - tradeAmount;
                     newCostBasis = existingAvgBuy > 0 ? Math.max(0, existingCostBasis - existingAvgBuy * tradeAmount) : Math.max(0, existingCostBasis - totalMoney);
+
+                    // Если ЭТА продажа перекроет всю выручку от продаж сверх
+                    // вложенного — капитал полностью отбивается, остаток бесплатный.
+                    var totalBoughtForCoin = h ? h.totalBought : 0;
+                    var newTotalSoldCash = (h ? h.totalSoldCash : 0) + totalMoney;
+                    if (totalBoughtForCoin > 0 && newTotalSoldCash >= totalBoughtForCoin - 0.000001) {
+                        newCostBasis = 0;
+                    }
+
                     newTotalPortfolioCost = Math.max(0, totalPortfolioCost - (existingCostBasis - newCostBasis));
                     extraRows += '<div class="sim-row"><span>Реализованный P&L по сделке</span><strong>' +
                         (realizedPnl === null ? '—' : (realizedPnl >= 0 ? '+' : '') + formatMoney(realizedPnl)) + '</strong></div>';
@@ -3722,6 +3921,366 @@
             setModalEditUi(false);
         }
 
+        /* ── Ребалансировка (обмен монет) ──
+           Прямая конвертация одной монеты в другую (напр. APT → NEAR), минуя $
+           на балансе. Записывается как обычная "Продажа" исходной монеты +
+           "Покупка" целевой монеты с одной датой — полностью совместимо с
+           редактированием/удалением сделок, без изменения структуры таблицы. */
+
+        function openSwapModal() {
+            swapFromCoin = '';
+            swapToCoin = '';
+            swapToPriceTouched = false;
+            swapDateTouched = false;
+
+            document.getElementById('swapDate').value = todayIso();
+            document.getElementById('swapFromAmount').value = '';
+            document.getElementById('swapFromPrice').value = '';
+            document.getElementById('swapRate').value = '';
+            document.getElementById('swapToAmount').value = '';
+            document.getElementById('swapToPrice').value = '';
+            document.getElementById('swapFee').value = '0';
+            document.getElementById('swapNote').value = '';
+            document.getElementById('swapFromSearch').value = '';
+            document.getElementById('swapToSearch').value = '';
+            document.getElementById('swapToCoinNew').value = '';
+            document.getElementById('swapPreviewWrap').style.display = 'none';
+
+            renderSwapPickerSide('from');
+            renderSwapPickerSide('to');
+            updateSwapRateLabels();
+
+            document.getElementById('swapModal').classList.add('active');
+            document.body.classList.add('modal-open');
+        }
+
+        function closeSwapModal() {
+            document.getElementById('swapModal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+        }
+
+        function renderSwapPickerSide(side) {
+            var forSaleOnly = side === 'from';
+            var coins = getPickerCoins(forSaleOnly);
+            var picker = document.getElementById(side === 'from' ? 'swapFromPicker' : 'swapToPicker');
+            var html = '';
+
+            if (coins.length === 0) {
+                html = '<div class="coin-picker-empty">' +
+                    (forSaleOnly ? 'Нет монет с балансом для обмена' : 'Добавьте UCID кнопкой «+ В список»') +
+                    '</div>';
+            } else {
+                coins.forEach(function(coin) {
+                    var balance = globalHoldings[coin] ? globalHoldings[coin].amount : 0;
+                    var balanceText = balance > 0 ? formatNumber(balance) : 'нет в портфеле';
+                    var sub = getCoinPickerSub(coin);
+                    html += '<button type="button" class="coin-picker-item" data-coin="' + coin + '" onclick="selectSwapCoin(\'' + side + '\',\'' + coin + '\')">' +
+                        '<span class="ticker">' + getCoinPickerLabel(coin) + '</span>' +
+                        '<span class="balance">' + (sub ? sub + ' · ' : '') + balanceText + '</span>' +
+                    '</button>';
+                });
+            }
+
+            picker.innerHTML = html;
+            highlightSwapPicker(side);
+        }
+
+        function highlightSwapPicker(side) {
+            var pickerId = side === 'from' ? 'swapFromPicker' : 'swapToPicker';
+            var current = side === 'from' ? swapFromCoin : swapToCoin;
+            document.querySelectorAll('#' + pickerId + ' .coin-picker-item').forEach(function(item) {
+                item.classList.toggle('active', item.getAttribute('data-coin') === current);
+            });
+        }
+
+        function selectSwapCoin(side, coin) {
+            coin = String(coin || '').toUpperCase().trim();
+            // Смена любой из монет обнуляет курс — он был посчитан для другой пары
+            // и подставленное по нему "Количество получено" больше не актуально.
+            document.getElementById('swapRate').value = '';
+
+            if (side === 'from') {
+                swapFromCoin = coin;
+                var price = getCurrentPrice(coin);
+                if (price !== null && price > 0) {
+                    document.getElementById('swapFromPrice').value = priceInputValue(price);
+                }
+            } else {
+                swapToCoin = coin;
+                if (!swapToPriceTouched) {
+                    var price2 = getCurrentPrice(coin);
+                    if (price2 !== null && price2 > 0) {
+                        document.getElementById('swapToPrice').value = priceInputValue(price2);
+                    }
+                }
+            }
+            highlightSwapPicker(side);
+            updateSwapRateLabels();
+            updateSwapPreview();
+        }
+
+        function updateSwapRateLabels() {
+            var fromLabel = document.getElementById('swapRateFromLabel');
+            var toLabel = document.getElementById('swapRateToLabel');
+            if (fromLabel) fromLabel.textContent = swapFromCoin ? (getCoinSymbol(swapFromCoin) || swapFromCoin) : 'монета А';
+            if (toLabel) toLabel.textContent = swapToCoin ? (getCoinSymbol(swapToCoin) || swapToCoin) : 'монета Б';
+        }
+
+        // Курс обмена — единственная "связка" между двумя количествами (как в
+        // обычном конвертере валют): откуда бы курс ни взялся — вписан вручную
+        // или выведен из уже введённого "Количество получено" — он запоминается
+        // в поле "Курс обмена" и используется, чтобы при изменении "Отдаю:
+        // Количество" пропорционально пересчиталось и "Получаю: Количество".
+        function recomputeSwapToAmountFromRate() {
+            var rate = parseFloat(document.getElementById('swapRate').value);
+            var fromAmount = parseFloat(document.getElementById('swapFromAmount').value);
+            if (!isNaN(rate) && rate > 0 && !isNaN(fromAmount) && fromAmount > 0) {
+                document.getElementById('swapToAmount').value = parseFloat((fromAmount * rate).toFixed(8));
+            }
+        }
+
+        function recomputeSwapRateFromToAmount() {
+            var fromAmount = parseFloat(document.getElementById('swapFromAmount').value);
+            var toAmount = parseFloat(document.getElementById('swapToAmount').value);
+            if (!isNaN(fromAmount) && fromAmount > 0 && !isNaN(toAmount) && toAmount > 0) {
+                document.getElementById('swapRate').value = parseFloat((toAmount / fromAmount).toFixed(8));
+            }
+        }
+
+        function onSwapRateInput() {
+            recomputeSwapToAmountFromRate();
+            updateSwapPreview();
+        }
+
+        function onSwapToAmountInput() {
+            recomputeSwapRateFromToAmount();
+            updateSwapPreview();
+        }
+
+        function filterSwapPicker(side) {
+            var input = document.getElementById(side === 'from' ? 'swapFromSearch' : 'swapToSearch');
+            var pickerId = side === 'from' ? 'swapFromPicker' : 'swapToPicker';
+            var q = (input.value || '').toUpperCase().trim();
+            document.querySelectorAll('#' + pickerId + ' .coin-picker-item').forEach(function(item) {
+                var coin = item.getAttribute('data-coin') || '';
+                var meta = getCoinMeta(coin);
+                var hay = coin + ' ' + getCoinName(coin) + ' ' + getCoinSymbol(coin) +
+                    (meta && meta.id ? (' ' + meta.id) : '');
+                item.style.display = !q || hay.toUpperCase().indexOf(q) !== -1 ? '' : 'none';
+            });
+        }
+
+        function fillSwapMaxAmount() {
+            if (!swapFromCoin) { showToast('Сначала выберите монету слева', 'error'); return; }
+            var bal = globalHoldings[swapFromCoin] ? globalHoldings[swapFromCoin].amount : 0;
+            if (bal <= 0) { showToast('Нет баланса ' + (getCoinSymbol(swapFromCoin) || swapFromCoin), 'error'); return; }
+            document.getElementById('swapFromAmount').value = bal;
+            updateSwapPreview();
+        }
+
+        function saveNewSwapAsset() {
+            var input = document.getElementById('swapToCoinNew');
+            var val = input.value.trim();
+            if (!val) { showToast('Введите UCID', 'error'); return; }
+            if (!isNumericId(val)) {
+                showToast('UCID — это число с CoinMarketCap (напр. 20947 для Sui)', 'error');
+                return;
+            }
+            showLoading(true, 'Сохранение актива...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    if (res && res.success) {
+                        userAssets = res.list || [];
+                        if (res.meta) coinMeta[val] = res.meta;
+                        input.value = '';
+                        renderSwapPickerSide('to');
+                        selectSwapCoin('to', val);
+                        var label = res.meta && res.meta.name ? res.meta.name : val;
+                        showToast(label + ' добавлен в список');
+                    } else {
+                        showToast(res && res.error ? res.error : 'Ошибка', 'error');
+                    }
+                })
+                .withFailureHandler(function() {
+                    showLoading(false);
+                    showToast('Ошибка сохранения актива', 'error');
+                })
+                .addUserAssetCoin(val);
+        }
+
+        function updateSwapPreview() {
+            var wrap = document.getElementById('swapPreviewWrap');
+            var resultEl = document.getElementById('swapPreviewResult');
+            if (!wrap || !resultEl) return;
+
+            function hide() { wrap.style.display = 'none'; }
+
+            var fromAmount = parseFloat(document.getElementById('swapFromAmount').value);
+            var fromPrice = parseFloat(document.getElementById('swapFromPrice').value);
+            var toAmount = parseFloat(document.getElementById('swapToAmount').value);
+            var toPriceInput = document.getElementById('swapToPrice');
+
+            if (!swapFromCoin || isNaN(fromAmount) || fromAmount <= 0 || isNaN(fromPrice) || fromPrice <= 0) {
+                hide();
+                return;
+            }
+
+            var fromValue = fromAmount * fromPrice;
+
+            if (!isNaN(toAmount) && toAmount > 0 && !swapToPriceTouched) {
+                toPriceInput.value = priceInputValue(fromValue / toAmount);
+            }
+
+            var toPrice = parseFloat(toPriceInput.value);
+
+            if (!swapToCoin || isNaN(toAmount) || toAmount <= 0 || isNaN(toPrice) || toPrice <= 0) {
+                hide();
+                return;
+            }
+
+            var toValue = toAmount * toPrice;
+            var fee = parseFloat(document.getElementById('swapFee').value) || 0;
+
+            var snapFrom = getChartCoinSnapshot(swapFromCoin);
+            var hFrom = snapFrom ? snapFrom.h : null;
+            var avgBuyFrom = (hFrom && !hFrom.isRecovered) ? hFrom.avgBuy : 0;
+            var realizedPnl = avgBuyFrom > 0 ? (fromPrice - avgBuyFrom) * fromAmount - fee : null;
+
+            // Точка входа отдаваемой монеты после ЧАСТИЧНОЙ продажи — учёт по
+            // средней цене: списываем долю "Вложено", соответствующую проданному
+            // количеству ПО СРЕДНЕЙ ЦЕНЕ ПОКУПКИ (а не по выручке от продажи),
+            // поэтому цена входа остатка не прыгает от случайной цены продажи.
+            // Исключение — если этой же продажей выручка от всех продаж монеты
+            // перекрывает всё вложенное: тогда капитал считается отбитым,
+            // а остаток — бесплатным (Вложено = 0).
+            var hasExistingFrom = !!(hFrom && hFrom.amount > 0);
+            var existingFromAmount = hFrom ? hFrom.amount : 0;
+            var existingFromCost = hFrom ? hFrom.costBasis : 0;
+            var existingFromAvgBuy = existingFromAmount > 0 ? existingFromCost / existingFromAmount : 0;
+            var newFromAmount = Math.max(0, existingFromAmount - fromAmount);
+            var newFromCost = existingFromAvgBuy > 0
+                ? Math.max(0, existingFromCost - existingFromAvgBuy * fromAmount)
+                : Math.max(0, existingFromCost - fromValue);
+
+            var totalBoughtFrom = hFrom ? hFrom.totalBought : 0;
+            var newTotalSoldCashFrom = (hFrom ? hFrom.totalSoldCash : 0) + fromValue;
+            if (totalBoughtFrom > 0 && newTotalSoldCashFrom >= totalBoughtFrom - 0.000001) {
+                newFromCost = 0;
+            }
+
+            var newFromAvgBuy = newFromAmount > 0.000001 ? newFromCost / newFromAmount : 0;
+            var fromFullySold = newFromAmount <= 0.000001;
+
+            var snapTo = getChartCoinSnapshot(swapToCoin);
+            var hTo = snapTo ? snapTo.h : null;
+            var hasExistingTo = !!(hTo && hTo.amount > 0 && !hTo.isRecovered);
+            var existingToAmount = hTo ? hTo.amount : 0;
+            var existingToCost = hTo ? hTo.costBasis : 0;
+            var newToAmount = existingToAmount + toAmount;
+            var newToAvgBuy = newToAmount > 0 ? (existingToCost + toValue) / newToAmount : 0;
+
+            var fromLabel = getCoinSymbol(swapFromCoin) || getCoinName(swapFromCoin) || swapFromCoin;
+            var toLabel = getCoinSymbol(swapToCoin) || getCoinName(swapToCoin) || swapToCoin;
+
+            var html = '<div class="sim-row"><span>Отдаёте</span><strong>' +
+                formatNumber(fromAmount, 4) + ' ' + fromLabel + ' · ' + formatMoney(fromValue) + '</strong></div>';
+            html += '<div class="sim-row"><span>Получаете</span><strong>' +
+                formatNumber(toAmount, 4) + ' ' + toLabel + ' · ' + formatMoney(toValue) + '</strong></div>';
+            if (Math.abs(fromValue - toValue) > 0.01) {
+                html += '<div class="sim-row"><span>Разница в оценке сторон</span><strong>' +
+                    (toValue >= fromValue ? '+' : '') + formatMoney(toValue - fromValue) + '</strong></div>';
+            }
+            html += '<div class="sim-row"><span>Реализованный P&L по ' + fromLabel + '</span><strong>' +
+                (realizedPnl === null ? '—' : (realizedPnl >= 0 ? '+' : '') + formatMoney(realizedPnl)) + '</strong></div>';
+            html += '<div class="sim-row"><span>Точка входа ' + fromLabel + '</span><strong>' +
+                (hasExistingFrom ? formatPrice(hFrom.avgBuy) + ' → ' : '') +
+                (fromFullySold ? 'продано полностью' : formatPrice(newFromAvgBuy)) + '</strong></div>';
+            html += '<div class="sim-row"><span>Точка входа ' + toLabel + '</span><strong>' +
+                (hasExistingTo ? formatPrice(hTo.avgBuy) + ' → ' : '') + formatPrice(newToAvgBuy) + '</strong></div>';
+
+            resultEl.innerHTML = html;
+            wrap.style.display = 'block';
+        }
+
+        function submitSwapForm(e) {
+            e.preventDefault();
+
+            if (!swapFromCoin || !swapToCoin) {
+                showToast('Выберите обе монеты — что отдаёте и что получаете', 'error');
+                return;
+            }
+            if (swapFromCoin === swapToCoin) {
+                showToast('Монеты обмена должны отличаться', 'error');
+                return;
+            }
+
+            var fromAmount = parseFloat(document.getElementById('swapFromAmount').value);
+            var fromPrice = parseFloat(document.getElementById('swapFromPrice').value);
+            var toAmount = parseFloat(document.getElementById('swapToAmount').value);
+            var toPrice = parseFloat(document.getElementById('swapToPrice').value);
+            var fee = parseFloat(document.getElementById('swapFee').value) || 0;
+            var date = document.getElementById('swapDate').value;
+            var note = document.getElementById('swapNote').value.trim();
+
+            if (isNaN(fromAmount) || fromAmount <= 0 || isNaN(fromPrice) || fromPrice <= 0) {
+                showToast('Укажите количество и цену монеты, которую отдаёте', 'error');
+                return;
+            }
+            if (isNaN(toAmount) || toAmount <= 0 || isNaN(toPrice) || toPrice <= 0) {
+                showToast('Укажите количество и цену монеты, которую получаете', 'error');
+                return;
+            }
+
+            var available = globalHoldings[swapFromCoin] ? globalHoldings[swapFromCoin].amount : 0;
+            if (available <= 0 || available < fromAmount - 0.000001) {
+                showToast('Недостаточно ' + (getCoinSymbol(swapFromCoin) || swapFromCoin) + ': доступно ' + formatNumber(available, 4), 'error');
+                return;
+            }
+
+            var fromValue = fromAmount * fromPrice;
+            var toValue = toAmount * toPrice;
+            var fromSymbol = getCoinSymbol(swapFromCoin) || swapFromCoin;
+            var toSymbol = getCoinSymbol(swapToCoin) || swapToCoin;
+
+            var payload = {
+                date: date,
+                fee: fee,
+                sell: {
+                    coin: swapFromCoin,
+                    amount: fromAmount,
+                    price: fromPrice,
+                    total: fromValue,
+                    note: note || ('Ребалансировка → ' + toSymbol)
+                },
+                buy: {
+                    coin: swapToCoin,
+                    amount: toAmount,
+                    price: toPrice,
+                    total: toValue,
+                    note: note || ('Ребалансировка ← ' + fromSymbol)
+                }
+            };
+
+            showLoading(true, 'Сохранение ребалансировки...');
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    showLoading(false);
+                    if (result && result.success) {
+                        showToast('Ребалансировка ' + fromSymbol + ' → ' + toSymbol + ' сохранена!');
+                        closeSwapModal();
+                        refreshData();
+                    } else {
+                        showToast('Ошибка: ' + (result && result.error ? result.error : 'неизвестная ошибка'), 'error');
+                    }
+                })
+                .withFailureHandler(function() {
+                    showLoading(false);
+                    showToast('Ошибка сохранения ребалансировки', 'error');
+                })
+                .addSwapTransaction(payload);
+        }
+
         function showToast(message, type) {
             var toast = document.getElementById('toast');
             document.getElementById('toastMessage').textContent = message;
@@ -4353,28 +4912,56 @@
                 var h = holdings[coin];
 
                 if (tx.type === 'Покупка') {
+                    var buyCost = tx.total || (tx.price * tx.amount);
                     h.amount += tx.amount;
-                    h.totalBought += tx.total || (tx.price * tx.amount);
+                    h.totalBought += buyCost;
+                    h.costBasis += buyCost;
                 } else if (tx.type === 'Аирдроп') {
+                    // Бесплатные монеты не добавляют стоимости, но "размывают"
+                    // среднюю цену входа — costBasis не меняется, только
+                    // увеличивается количество монет в знаменателе.
                     h.amount += tx.amount;
                 } else if (tx.type === 'Скам') {
                     h.amount += tx.amount || 1;
                     h.totalBought += tx.total;
+                    h.costBasis += tx.total;
                     h.isScam = true;
                 } else if (tx.type === 'Продажа') {
+                    // Учёт по средней цене (как на биржах): при ЧАСТИЧНОЙ продаже
+                    // цена входа оставшихся монет не меняется — списываем ровно
+                    // ту долю "Вложено", которая соответствует проданному
+                    // количеству по СРЕДНЕЙ цене покупки (а не по выручке от
+                    // продажи). Прибыль/убыток от самой сделки фиксируется
+                    // отдельно, в реализованный P&L, и не "размазывается" на
+                    // оставшуюся позицию.
+                    var avgBeforeSale = h.amount > 0 ? h.costBasis / h.amount : 0;
+                    var soldAmount = Math.min(tx.amount, h.amount);
+                    var costRemoved = avgBeforeSale * soldAmount;
+                    var realizedForSale = (tx.price - avgBeforeSale) * soldAmount - (tx.fee || 0);
+
                     h.amount -= tx.amount;
+                    h.costBasis = Math.max(0, h.costBasis - costRemoved);
                     h.totalSoldCash += tx.total;
                     h.sold += tx.total;
-                    h.realizedPnL += tx.pnl || 0;
-                    totalRealizedPnL += tx.pnl;
+                    h.realizedPnL += realizedForSale;
+                    totalRealizedPnL += realizedForSale;
                 }
 
                 if (h.amount <= 0.00000001) {
                     h.amount = 0;
                 }
 
-                // Вложено = сколько своих денег ещё «в игре» (капитал не отбит продажами)
-                h.costBasis = h.amount > 0 ? Math.max(0, h.totalBought - h.totalSoldCash) : 0;
+                // НО: если суммарная выручка от всех продаж уже перекрыла всё,
+                // что было вложено в монету изначально — считаем капитал полностью
+                // отбитым и оставшиеся монеты "бесплатными" (Вложено = 0),
+                // независимо от того, что даёт обычный усреднённый расчёт выше.
+                // Это отдельная проверка поверх учёта по средней цене — именно
+                // она даёт эффект "Капитал отбит" без искажения цены входа при
+                // обычных частичных продажах, которые не отбивают всю сумму.
+                if (h.totalBought > 0 && h.totalSoldCash >= h.totalBought - 0.000001) {
+                    h.costBasis = 0;
+                }
+
                 h.isRecovered = h.amount > 0 && h.costBasis <= 0.000001;
                 h.avgBuy = h.amount > 0 && h.costBasis > 0 ? h.costBasis / h.amount : 0;
             }
@@ -4628,6 +5215,41 @@
             }
         }
 
+        function filterPositionsTable() {
+            var input = document.getElementById('positionsSearch');
+            var tbody = document.getElementById('portfolioList');
+            if (!input || !tbody) return;
+
+            var q = (input.value || '').toLowerCase().trim();
+            var rows = tbody.querySelectorAll('tr[data-search]');
+            var visibleCount = 0;
+
+            rows.forEach(function(row) {
+                var hay = row.getAttribute('data-search') || '';
+                var match = !q || hay.indexOf(q) !== -1;
+                row.style.display = match ? '' : 'none';
+                if (match) visibleCount++;
+            });
+
+            var emptyRow = document.getElementById('positionsSearchEmpty');
+            if (rows.length > 0) {
+                if (visibleCount === 0 && q) {
+                    if (!emptyRow) {
+                        emptyRow = document.createElement('tr');
+                        emptyRow.id = 'positionsSearchEmpty';
+                        var td = document.createElement('td');
+                        td.colSpan = 6;
+                        td.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="icon">🔍</div><p>Ничего не найдено по запросу «' + q.replace(/</g, '&lt;') + '»</p></div>';
+                        emptyRow.appendChild(td);
+                        tbody.appendChild(emptyRow);
+                    }
+                    emptyRow.style.display = '';
+                } else if (emptyRow) {
+                    emptyRow.style.display = 'none';
+                }
+            }
+        }
+
         function renderPortfolio(portfolio) {
             var holdings = portfolio.holdings;
             var tbody = document.getElementById('portfolioList');
@@ -4707,8 +5329,10 @@
                 if (h.isScam) subParts.push('скам · ' + formatMoney(invested) + ' вложено');
                 else subParts.push(formatNumber(h.amount) + ' шт');
                 var displayName = getCoinName(coin);
+                var searchHay = (displayName + ' ' + (sym || '') + ' ' + (ucid || '') + ' ' + coin)
+                    .toLowerCase().replace(/"/g, '&quot;');
 
-                html += '<tr>' +
+                html += '<tr data-search="' + searchHay + '">' +
                     '<td><div class="coin-cell-row">' +
                         '<div class="coin-cell-main" onclick="selectPortfolioChartCoin(\'' + jsEscape(coin) + '\')" title="График ' + displayName + '">' +
                             '<div class="coin-avatar" style="background:linear-gradient(135deg,' + color + ',#38bdf8)">' + getCoinAvatar(coin) + '</div>' +
@@ -4727,6 +5351,7 @@
 
             lastPortfolioHTML = html;
             tbody.innerHTML = html;
+            filterPositionsTable();
             renderDonutChart({ labels: chartLabels, values: chartValues, coins: chartCoins });
         }
 
@@ -4769,6 +5394,22 @@
             document.getElementById('riskDesc').textContent = activeCoins.length > 3 ? 'Хорошая диверсификация' : 'Низкая диверсификация';
         }
 
+        function escapeHtml(str) {
+            return String(str || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function isSwapNote(note) {
+            var n = String(note || '');
+            // Поддерживаем и новый текст ("Ребалансировка"), и старый ("Обмен") —
+            // на случай сделок, сохранённых до переименования кнопки.
+            return n.indexOf('Ребалансировка → ') === 0 || n.indexOf('Ребалансировка ← ') === 0 ||
+                n.indexOf('Обмен → ') === 0 || n.indexOf('Обмен ← ') === 0;
+        }
+
         function renderTable() {
             var tbody = document.getElementById('transactionsTable');
             if (transactions.length === 0) {
@@ -4784,17 +5425,24 @@
                 else if (tx.type === 'Аирдроп') { badge = 'badge-airdrop'; label = 'Аирдроп'; }
                 else if (tx.type === 'Скам') { badge = 'badge-scam'; label = 'Скам'; }
                 else { badge = 'badge-sell'; label = 'Продажа'; }
+
+                var isSwap = isSwapNote(tx.note);
+                if (isSwap) badge = 'badge-swap';
+
                 var pnl = tx.pnl || 0;
                 var pnlClass = pnl >= 0 ? 'pnl-up' : 'pnl-down';
                 var pnlText = tx.type === 'Продажа' ? formatMoney(pnl) : '—';
                 var priceText = tx.type === 'Аирдроп' ? 'Бесплатно' : (tx.type === 'Скам' ? '$0' : formatPrice(tx.price));
                 var totalText = tx.type === 'Аирдроп' ? '—' : formatMoney(tx.total);
                 var amountText = tx.type === 'Скам' ? '—' : formatNumber(tx.amount, 5);
+                var typeNoteHtml = isSwap
+                    ? '<div class="swap-note-tag">🔄 ' + escapeHtml(tx.note) + '</div>'
+                    : (tx.note ? '<div class="swap-note-tag">' + escapeHtml(tx.note) + '</div>' : '');
 
                 html += '<tr>' +
                     '<td><div class="coin-cell"><div class="coin-avatar">' + getCoinAvatar(tx.coin) + '</div><div><div class="coin-name">' + getCoinName(tx.coin) + '</div>' +
                     '<div class="coin-sub mono">' + getCoinPickerSub(tx.coin) + '</div></div></div></td>' +
-                    '<td data-label="Тип"><span class="badge ' + badge + '">' + label + '</span></td>' +
+                    '<td data-label="Тип"><div class="type-cell"><span class="badge ' + badge + '">' + label + '</span>' + typeNoteHtml + '</div></td>' +
                     '<td data-label="Кол-во" class="mono">' + amountText + '</td>' +
                     '<td data-label="Цена" class="mono">' + priceText + '</td>' +
                     '<td data-label="Сумма" class="mono">' + totalText + '</td>' +

@@ -1008,6 +1008,119 @@ function addTransaction(data) {
   return {success: true};
 }
 
+/**
+ * Обмен одной монеты на другую напрямую (например, APT → NEAR), минуя доллары
+ * на балансе. Записывается как обычная "Продажа" исходной монеты (с расчётом
+ * реализованного P&L по её средней цене покупки) + "Покупка" целевой монеты —
+ * те же две строки, что получились бы, если добавить их вручную по отдельности,
+ * но обе валидируются и записываются за один проход, чтобы при ошибке в одной
+ * из сторон не оставалась "повисшая" половина обмена.
+ */
+function addSwapTransaction(data) {
+  const info = getDealsSheet(true);
+  const sheet = info.sheet;
+
+  const sell = data && data.sell;
+  const buy = data && data.buy;
+  if (!sell || !buy) {
+    return { success: false, error: 'Не переданы обе стороны обмена' };
+  }
+
+  const date = data.date;
+  const fee = parseSheetNumber(data.fee);
+
+  const sellCoin = normalizeCoinKey(sell.coin);
+  const buyCoin = normalizeCoinKey(buy.coin);
+
+  if (!sellCoin || !buyCoin) {
+    return { success: false, error: 'Укажите обе монеты для обмена' };
+  }
+  if (sellCoin === buyCoin) {
+    return { success: false, error: 'Монеты обмена должны отличаться' };
+  }
+
+  const sellAmount = parseSheetNumber(sell.amount);
+  const sellPrice = parseSheetNumber(sell.price);
+  const sellTotal = parseSheetNumber(sell.total) || (sellAmount * sellPrice);
+
+  const buyAmount = parseSheetNumber(buy.amount);
+  const buyPrice = parseSheetNumber(buy.price);
+  const buyTotal = parseSheetNumber(buy.total) || (buyAmount * buyPrice);
+
+  if (sellAmount <= 0 || sellPrice <= 0 || sellTotal <= 0) {
+    return { success: false, error: 'Укажите корректное количество и цену для монеты, которую отдаёте' };
+  }
+  if (buyAmount <= 0 || buyPrice <= 0 || buyTotal <= 0) {
+    return { success: false, error: 'Укажите корректное количество и цену для монеты, которую получаете' };
+  }
+
+  const allData = sheet.getDataRange().getValues();
+
+  // Баланс отдаваемой монеты — как при обычной продаже
+  let currentBalance = 0;
+  for (let i = 1; i < allData.length; i++) {
+    const rowCoin = String(allData[i][2]).toUpperCase().trim();
+    const rowType = normalizeTxType(allData[i][1]);
+    if (rowCoin === sellCoin && normalizeTxId(allData[i][0], i + 1)) {
+      if (isAcquisitionType(rowType)) {
+        currentBalance += parseFloat(allData[i][3]) || 0;
+      } else if (rowType === 'Продажа') {
+        currentBalance -= parseFloat(allData[i][3]) || 0;
+      }
+    }
+  }
+  if (currentBalance < sellAmount - 0.000001) {
+    return { success: false, error: 'Недостаточно ' + sellCoin + ' для обмена (баланс: ' + currentBalance + ')' };
+  }
+
+  // Средняя цена покупки отдаваемой монеты — для реализованного P&L
+  const coinAcquisitions = [];
+  for (let i = 1; i < allData.length; i++) {
+    const rowCoin = String(allData[i][2]).toUpperCase().trim();
+    const rowType = normalizeTxType(allData[i][1]);
+    if (rowCoin === sellCoin && isAcquisitionType(rowType) && normalizeTxId(allData[i][0], i + 1)) {
+      coinAcquisitions.push({
+        amount: parseFloat(allData[i][3]) || 0,
+        price: parseFloat(rowType === 'Аирдроп' ? 0 : allData[i][4]) || 0
+      });
+    }
+  }
+
+  let avgBuy = 0;
+  let pnl = 0;
+  if (coinAcquisitions.length > 0) {
+    const totalAmount = coinAcquisitions.reduce((s, b) => s + b.amount, 0);
+    const totalCost = coinAcquisitions.reduce((s, b) => s + (b.amount * b.price), 0);
+    if (totalAmount > 0) {
+      avgBuy = totalCost / totalAmount;
+      pnl = (sellPrice - avgBuy) * sellAmount - fee;
+    }
+  }
+
+  const baseId = String(Date.now());
+  const sellId = baseId + '-swap-out';
+  const buyId = baseId + '-swap-in';
+  const lastRow = sheet.getLastRow() + 1;
+
+  // Обе строки пишутся одним вызовом setValues — если что-то пойдёт не так,
+  // это произойдёт до записи (все проверки выше), а не между двумя отдельными
+  // сохранениями, так что "половинчатого" обмена быть не может.
+  sheet.getRange(lastRow, 1, 2, 11).setValues([
+    [sellId, 'Продажа', sellCoin, sellAmount, sellPrice, sellTotal, fee, date, pnl, avgBuy, sell.note || ('Ребалансировка → ' + buyCoin)],
+    [buyId, 'Покупка', buyCoin, buyAmount, buyPrice, buyTotal, 0, date, 0, 0, buy.note || ('Ребалансировка ← ' + sellCoin)]
+  ]);
+
+  sheet.getRange(lastRow, 1, 2, 1).setNumberFormat('@');
+  sheet.getRange(lastRow, 8, 2, 1).setNumberFormat('yyyy-mm-dd');
+
+  ensureCoinsTracked([sellCoin, buyCoin]);
+  [sellCoin, buyCoin].forEach(function(c) {
+    if (isNumericId(c) || isTickerAsset(c)) addUserAsset(c);
+  });
+
+  return { success: true };
+}
+
 function deleteTransaction(id) {
   const info = getDealsSheet(false);
   const sheet = info.sheet;
