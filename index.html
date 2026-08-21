@@ -742,16 +742,19 @@
         /* ── Positions table ── */
         .table-wrap { overflow-x: auto; }
 
-        .positions-search-wrap {
+        .positions-search-wrap,
+        .history-search-wrap {
             padding: 14px 24px 10px;
         }
 
-        .positions-search-wrap .form-input {
+        .positions-search-wrap .form-input,
+        .history-search-wrap .form-input {
             padding: 9px 12px;
             font-size: 13px;
         }
 
-        html.mobile-layout .positions-search-wrap {
+        html.mobile-layout .positions-search-wrap,
+        html.mobile-layout .history-search-wrap {
             padding: 12px 16px 8px;
         }
 
@@ -2460,7 +2463,11 @@
                                     <span class="collapsible-toggle-icon">▾</span>
                                 </div>
                             </div>
-                            <div class="table-wrap collapsible-body">
+                            <div class="collapsible-body">
+                                <div class="history-search-wrap">
+                                    <input type="text" id="historySearch" class="form-input" placeholder="Поиск монеты по названию, тикеру или UCID..." oninput="filterHistoryTable()" autocomplete="off">
+                                </div>
+                                <div class="table-wrap">
                                 <table class="responsive-table history-table">
                                     <thead>
                                         <tr>
@@ -2486,6 +2493,7 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5930,6 +5938,43 @@
             }
         }
 
+        function filterHistoryTable() {
+            var input = document.getElementById('historySearch');
+            var tbody = document.getElementById('transactionsTable');
+            if (!input || !tbody) return;
+
+            var q = (input.value || '').toLowerCase().trim();
+            var rows = tbody.querySelectorAll('tr[data-search]');
+            var visibleCount = 0;
+
+            rows.forEach(function(row) {
+                var hay = row.getAttribute('data-search') || '';
+                var match = !q || hay.indexOf(q) !== -1;
+                row.style.display = match ? '' : 'none';
+                if (match) visibleCount++;
+            });
+
+            var emptyRow = document.getElementById('historySearchEmpty');
+            if (rows.length > 0) {
+                if (visibleCount === 0 && q) {
+                    if (!emptyRow) {
+                        emptyRow = document.createElement('tr');
+                        emptyRow.id = 'historySearchEmpty';
+                        var td = document.createElement('td');
+                        td.colSpan = 8;
+                        td.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="icon">🔍</div><p>Нет сделок по запросу «' + escapeHtml(q) + '»</p></div>';
+                        emptyRow.appendChild(td);
+                        tbody.appendChild(emptyRow);
+                    } else {
+                        emptyRow.querySelector('p').innerHTML = 'Нет сделок по запросу «' + escapeHtml(q) + '»';
+                    }
+                    emptyRow.style.display = '';
+                } else if (emptyRow) {
+                    emptyRow.style.display = 'none';
+                }
+            }
+        }
+
         function filterPositionsTable() {
             var input = document.getElementById('positionsSearch');
             var tbody = document.getElementById('portfolioList');
@@ -6168,8 +6213,14 @@
                     ? '<div class="swap-note-tag">' + (isDrawdown ? '⤵ ' : '🔄 ') + escapeHtml(tx.note) + '</div>'
                     : (tx.note ? '<div class="swap-note-tag">' + escapeHtml(tx.note) + '</div>' : '');
 
-                html += '<tr>' +
-                    '<td><div class="coin-cell"><div class="coin-avatar">' + getCoinAvatar(tx.coin) + '</div><div><div class="coin-name">' + getCoinName(tx.coin) + '</div>' +
+                var txName = getCoinName(tx.coin);
+                var txSym = getCoinSymbol(tx.coin);
+                var txUcid = getCoinUcid(tx.coin);
+                var searchHay = (txName + ' ' + (txSym || '') + ' ' + (txUcid || '') + ' ' + tx.coin)
+                    .toLowerCase().replace(/"/g, '&quot;');
+
+                html += '<tr data-search="' + searchHay + '">' +
+                    '<td><div class="coin-cell"><div class="coin-avatar">' + getCoinAvatar(tx.coin) + '</div><div><div class="coin-name">' + txName + '</div>' +
                     '<div class="coin-sub mono">' + getCoinPickerSub(tx.coin) + '</div></div></div></td>' +
                     '<td data-label="Тип"><div class="type-cell"><span class="badge ' + badge + '">' + label + '</span>' + typeNoteHtml + '</div></td>' +
                     '<td data-label="Кол-во" class="mono">' + amountText + '</td>' +
@@ -6182,6 +6233,7 @@
                 '</tr>';
             });
             tbody.innerHTML = html;
+            filterHistoryTable();
         }
 
         function renderAll() {
