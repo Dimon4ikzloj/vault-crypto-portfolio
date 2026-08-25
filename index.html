@@ -491,8 +491,10 @@
 
         .tools-grid .perf-chart {
             min-height: 220px;
-            height: auto;
-            padding-bottom: 24px;
+            height: 220px;
+            max-height: 260px;
+            padding-bottom: 0;
+            overflow: hidden;
         }
 
         .tools-grid > .card:nth-child(-n+2) {
@@ -517,6 +519,17 @@
                 height: auto;
                 min-height: 0;
                 overflow: visible;
+            }
+
+            .tools-grid > .card {
+                height: auto;
+            }
+
+            .tools-grid > .card .perf-chart {
+                flex: none;
+                height: 200px;
+                min-height: 200px;
+                max-height: 200px;
             }
         }
 
@@ -855,6 +868,82 @@
         .coin-name { font-weight: 600; font-size: 14px; }
         .coin-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 
+        .location-tag {
+            display: inline-flex;
+            align-items: center;
+            max-width: 160px;
+            margin-top: 5px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            background: rgba(56, 189, 248, 0.1);
+            color: #38bdf8;
+            font-size: 10px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            line-height: 1.4;
+        }
+
+        .location-tag:hover { border-color: #38bdf8; }
+
+        .location-tag-empty {
+            background: transparent;
+            border-style: dashed;
+            border-color: var(--border);
+            color: var(--text-muted);
+        }
+
+        .location-tag-empty:hover {
+            border-color: var(--cyan);
+            color: var(--cyan);
+        }
+
+        .location-group-title {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin: 12px 0 6px;
+        }
+
+        .location-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+            gap: 6px;
+            max-height: 260px;
+            overflow-y: auto;
+            padding: 2px;
+        }
+
+        .location-option {
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            text-align: center;
+            line-height: 1.3;
+        }
+
+        .location-option:hover {
+            border-color: rgba(45, 212, 191, 0.45);
+            color: var(--text);
+        }
+
+        .location-option.active {
+            border-color: var(--cyan);
+            background: rgba(45, 212, 191, 0.12);
+            color: var(--cyan);
+        }
+
         .mono { font-family: 'JetBrains Mono', monospace; }
         .pnl-up { color: var(--green); }
         .pnl-down { color: var(--red); }
@@ -1175,7 +1264,61 @@
             text-transform: uppercase;
         }
 
-        .perf-chart { height: 140px; padding: 0 16px 16px; }
+        .perf-chart {
+            height: 140px;
+            padding: 0 12px 0 8px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+        }
+
+        .perf-chart-axis {
+            flex: 0 0 72px;
+            width: 72px;
+            position: relative;
+            z-index: 2;
+            background: var(--bg-card);
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        .perf-chart-scroll {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-x;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.28) rgba(255,255,255,0.06);
+        }
+
+        .perf-chart-scroll::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .perf-chart-scroll::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+        }
+
+        .perf-chart-scroll::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.28);
+            border-radius: 4px;
+        }
+
+        .perf-chart-inner {
+            height: 100%;
+            min-width: 100%;
+            position: relative;
+        }
+
+        .perf-chart canvas {
+            display: block;
+        }
 
         /* ── Forms ── */
         .form-group { margin-bottom: 14px; }
@@ -1868,6 +2011,13 @@
             max-height: none;
         }
         html.mobile-layout .tools-grid > .card:nth-child(-n+2) { min-height: 0; }
+        html.mobile-layout .tools-grid > .card { height: auto; }
+        html.mobile-layout .tools-grid > .card .perf-chart {
+            flex: none;
+            height: 200px;
+            min-height: 200px;
+            max-height: 200px;
+        }
 
         html.mobile-layout .card {
             border-radius: var(--radius-md);
@@ -2309,6 +2459,7 @@
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
                     <button class="btn btn-outline btn-sm mobile-only" onclick="openSwapModal()" title="Ребалансировка">🔄</button>
                     <button class="btn btn-outline btn-sm mobile-only" onclick="syncPrices()" title="Синхронизировать">⟳</button>
+                    <button class="btn btn-primary btn-sm mobile-only" onclick="openModal()">+ Сделка</button>
                     <div class="search-box desktop-only">
                         <span style="color:var(--text-muted)">⌕</span>
                         <input type="text" placeholder="Поиск активов..." id="searchInput" oninput="syncSearchFromDesktop(this)">
@@ -2578,7 +2729,14 @@
                                 <div class="card-title">Доходность</div>
                             </div>
                             <div class="perf-chart">
-                                <canvas id="perfChartCanvas"></canvas>
+                                <div class="perf-chart-axis" id="perfChartAxisWrap">
+                                    <canvas id="perfChartAxis"></canvas>
+                                </div>
+                                <div class="perf-chart-scroll" id="perfChartScroll">
+                                    <div class="perf-chart-inner" id="perfChartInner">
+                                        <canvas id="perfChartCanvas"></canvas>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -2960,6 +3118,31 @@
         </div>
     </div>
 
+    <!-- Location Modal (биржа / кошелёк для позиции) -->
+    <div class="modal-overlay" id="locationModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="locationModalTitle">Где хранится монета</div>
+                <button class="modal-close" type="button" onclick="closeLocationModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">Выберите биржу, кошелёк или введите свою надпись — так видно, где лежит позиция.</p>
+                <div class="form-group">
+                    <input type="text" class="form-input" id="locationSearch" placeholder="Поиск биржи или кошелька..." oninput="renderLocationOptions()" autocomplete="off">
+                </div>
+                <div id="locationOptions"></div>
+                <div class="form-group" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+                    <label class="form-label">Своя надпись</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input type="text" class="form-input" id="locationCustomInput" placeholder="Например, холодный кошелёк отца" maxlength="48" style="flex:1;min-width:160px;" onkeydown="if(event.key==='Enter'){event.preventDefault();saveCustomCoinLocation();}">
+                        <button type="button" class="btn btn-secondary" onclick="saveCustomCoinLocation()">Сохранить</button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="locationClearBtn" style="margin-top:10px;display:none;" onclick="saveCoinLocationChoice('')">Сбросить</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Chart Modal (TradingView) -->
     <div class="modal-overlay" id="chartModal">
         <div class="modal modal-chart">
@@ -3040,6 +3223,7 @@
         let myChartInstance = null;
         let lineChartInstance = null;
         let perfChartInstance = null;
+        let perfAxisInstance = null;
         let globalHoldings = {};
         let trackedCoins = [];
         let userAssets = [];
@@ -3054,6 +3238,8 @@
         let portfolioTvWidget = null;
         let lastPortfolioChartCoinsKey = '';
         let tvSymbolOverrides = {};
+        let coinLocations = {};
+        let locationModalCoin = '';
         let lastUsedCoin = '';
         try { lastUsedCoin = localStorage.getItem('vaultLastCoin') || ''; } catch (e) {}
         let lastPortfolioHTML = '';
@@ -3174,6 +3360,10 @@
             if (e.target === document.getElementById('alertModal')) closeAlertModal();
         });
 
+        document.getElementById('locationModal').addEventListener('click', function(e) {
+            if (e.target === document.getElementById('locationModal')) closeLocationModal();
+        });
+
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape' && document.getElementById('chartModal').classList.contains('active')) {
                 closeChartModal();
@@ -3183,6 +3373,9 @@
             }
             if (e.key === 'Escape' && document.getElementById('alertModal').classList.contains('active')) {
                 closeAlertModal();
+            }
+            if (e.key === 'Escape' && document.getElementById('locationModal').classList.contains('active')) {
+                closeLocationModal();
             }
         });
 
@@ -3572,6 +3765,178 @@
 
         function jsEscape(str) {
             return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        var KNOWN_EXCHANGES = [
+            'Binance', 'Binance.US', 'Bybit', 'OKX', 'Bitget', 'Gate.io', 'MEXC', 'KuCoin',
+            'HTX', 'BingX', 'WhiteBIT', 'Coinbase', 'Kraken', 'Gemini', 'Crypto.com',
+            'Bitstamp', 'Bitfinex', 'BitMart', 'LBank', 'XT.com', 'CoinEx', 'Poloniex',
+            'Upbit', 'Bithumb', 'Phemex', 'Woo X', 'Backpack', 'Hyperliquid', 'dYdX',
+            'Aster', 'Blofin', 'Toobit', 'CoinW', 'WEEX', 'Deribit', 'BitMEX',
+            'eToro', 'Robinhood', 'Revolut', 'EXMO', 'Rapira'
+        ];
+
+        var KNOWN_WALLETS = [
+            'Ledger', 'Trezor', 'Tangem', 'SafePal', 'Coldcard', 'MetaMask', 'Trust Wallet',
+            'Phantom', 'Tonkeeper', 'Rabby', 'Keplr', 'OKX Wallet', 'Coinbase Wallet',
+            'Bitget Wallet', 'Exodus', 'Electrum', 'Sparrow', 'BlueWallet', 'Atomic',
+            'Холодный кошелёк', 'Горячий кошелёк'
+        ];
+
+        function loadCoinLocationsLocal() {
+            try {
+                var raw = localStorage.getItem('vaultCoinLocations');
+                coinLocations = raw ? JSON.parse(raw) : {};
+                if (!coinLocations || typeof coinLocations !== 'object') coinLocations = {};
+            } catch (e) {
+                coinLocations = {};
+            }
+        }
+
+        function persistCoinLocationsLocal() {
+            try { localStorage.setItem('vaultCoinLocations', JSON.stringify(coinLocations)); } catch (e) {}
+        }
+
+        function getCoinLocation(coin) {
+            var key = normalizeCoinKey(coin);
+            if (coinLocations[key]) return coinLocations[key];
+            var ucid = getCoinUcid(coin);
+            if (ucid && coinLocations[normalizeCoinKey(ucid)]) return coinLocations[normalizeCoinKey(ucid)];
+            var sym = getCoinSymbol(coin);
+            if (sym && coinLocations[normalizeCoinKey(sym)]) return coinLocations[normalizeCoinKey(sym)];
+            return '';
+        }
+
+        function setCoinLocationKeys(coin, label) {
+            var keys = [normalizeCoinKey(coin)];
+            var ucid = getCoinUcid(coin);
+            var sym = getCoinSymbol(coin);
+            if (ucid) keys.push(normalizeCoinKey(ucid));
+            if (sym) keys.push(normalizeCoinKey(sym));
+            keys.forEach(function(k) {
+                if (!k) return;
+                if (label) coinLocations[k] = label;
+                else delete coinLocations[k];
+            });
+        }
+
+        function coinLocationAliases(coin) {
+            var aliases = [];
+            var ucid = getCoinUcid(coin);
+            var sym = getCoinSymbol(coin);
+            if (ucid) aliases.push(ucid);
+            if (sym) aliases.push(sym);
+            return aliases;
+        }
+
+        function customLocationLabels() {
+            var presets = {};
+            KNOWN_EXCHANGES.concat(KNOWN_WALLETS).forEach(function(name) { presets[name] = true; });
+            var seen = {};
+            var list = [];
+            Object.keys(coinLocations).forEach(function(k) {
+                var label = coinLocations[k];
+                if (!label || presets[label] || seen[label]) return;
+                seen[label] = true;
+                list.push(label);
+            });
+            return list.sort();
+        }
+
+        function openLocationModal(coin) {
+            locationModalCoin = normalizeCoinKey(coin) || String(coin || '').trim();
+            var title = document.getElementById('locationModalTitle');
+            if (title) title.textContent = 'Где хранится ' + getCoinName(locationModalCoin);
+            var search = document.getElementById('locationSearch');
+            var custom = document.getElementById('locationCustomInput');
+            var current = getCoinLocation(locationModalCoin);
+            if (search) search.value = '';
+            if (custom) custom.value = current && KNOWN_EXCHANGES.concat(KNOWN_WALLETS).indexOf(current) === -1 ? current : '';
+            var clearBtn = document.getElementById('locationClearBtn');
+            if (clearBtn) clearBtn.style.display = current ? '' : 'none';
+            renderLocationOptions();
+            document.getElementById('locationModal').classList.add('active');
+            document.body.classList.add('modal-open');
+            if (search) setTimeout(function() { search.focus(); }, 50);
+        }
+
+        function closeLocationModal() {
+            document.getElementById('locationModal').classList.remove('active');
+            document.body.classList.remove('modal-open');
+            locationModalCoin = '';
+        }
+
+        function renderLocationOptions() {
+            var wrap = document.getElementById('locationOptions');
+            if (!wrap) return;
+            var q = ((document.getElementById('locationSearch') || {}).value || '').toLowerCase().trim();
+            var current = getCoinLocation(locationModalCoin);
+            var custom = customLocationLabels();
+
+            function renderGroup(title, items) {
+                var filtered = items.filter(function(name) {
+                    return !q || name.toLowerCase().indexOf(q) !== -1;
+                });
+                if (!filtered.length) return '';
+                var html = '<div class="location-group-title">' + title + '</div><div class="location-list">';
+                filtered.forEach(function(name) {
+                    var active = current === name ? ' active' : '';
+                    html += '<button type="button" class="location-option' + active + '" onclick="saveCoinLocationChoice(\'' + jsEscape(name) + '\')">' + escapeHtml(name) + '</button>';
+                });
+                html += '</div>';
+                return html;
+            }
+
+            var html = renderGroup('Биржи', KNOWN_EXCHANGES) +
+                renderGroup('Кошельки', KNOWN_WALLETS) +
+                renderGroup('Мои надписи', custom);
+            wrap.innerHTML = html || '<p style="font-size:13px;color:var(--text-muted);padding:12px 0;">Ничего не найдено — введите свою надпись ниже</p>';
+        }
+
+        function saveCustomCoinLocation() {
+            var input = document.getElementById('locationCustomInput');
+            var label = ((input && input.value) || '').trim();
+            if (!label) {
+                showToast('Введите надпись', 'error');
+                return;
+            }
+            saveCoinLocationChoice(label);
+        }
+
+        function saveCoinLocationChoice(label) {
+            if (!locationModalCoin) return;
+            var coin = locationModalCoin;
+            var clean = String(label || '').trim();
+            if (clean.length > 48) {
+                showToast('Слишком длинная надпись (макс. 48 символов)', 'error');
+                return;
+            }
+            setCoinLocationKeys(coin, clean);
+            persistCoinLocationsLocal();
+            closeLocationModal();
+            var portfolio = calculatePortfolio();
+            renderPortfolio(portfolio);
+
+            var runner = (typeof google !== 'undefined' && google.script && google.script.run) ? google.script.run : null;
+            if (!runner) {
+                showToast(clean ? 'Место хранения сохранено' : 'Место хранения сброшено');
+                return;
+            }
+            runner
+                .withSuccessHandler(function(res) {
+                    if (res && res.success && res.locations) {
+                        coinLocations = res.locations;
+                        persistCoinLocationsLocal();
+                    } else if (res && res.error) {
+                        showToast(res.error, 'error');
+                        return;
+                    }
+                    showToast(clean ? 'Место хранения сохранено' : 'Место хранения сброшено');
+                })
+                .withFailureHandler(function() {
+                    showToast('Сохранено на этом устройстве, сервер недоступен', 'error');
+                })
+                .saveCoinLocation(normalizeCoinKey(coin), clean, coinLocationAliases(coin));
         }
 
         var TV_SYMBOL_MAP = {
@@ -5096,6 +5461,10 @@
             manualPrices = result.manualPrices || {};
             trackedCoins = result.trackedCoins || [];
             userAssets = result.userAssets || [];
+            if (result.coinLocations && typeof result.coinLocations === 'object') {
+                coinLocations = result.coinLocations;
+                persistCoinLocationsLocal();
+            }
             renderAll();
             updatePriceCacheStatus(priceCacheInfo, result.priceUpdate);
             if (result.autoSync) {
@@ -5892,8 +6261,64 @@
             }
         }
 
+        function sizePerfChartTrack(barCount) {
+            var inner = document.getElementById('perfChartInner');
+            var scroll = document.getElementById('perfChartScroll');
+            var axisWrap = document.getElementById('perfChartAxisWrap');
+            if (!inner || !scroll) return;
+            var n = Math.max(barCount, 1);
+            var mobile = document.documentElement.classList.contains('mobile-layout');
+            var slot = mobile ? 36 : 40;
+            inner.style.width = Math.max(scroll.clientWidth, n * slot) + 'px';
+            if (axisWrap) axisWrap.style.height = scroll.clientHeight + 'px';
+        }
+
+        function computePerfYScale(values) {
+            var nums = values.length ? values.slice() : [0];
+            var min = Math.min.apply(null, nums.concat([0]));
+            var max = Math.max.apply(null, nums.concat([0]));
+            min = Math.max(-99.9, min);
+            if (min === max) {
+                min = Math.max(-99.9, min - 1);
+                max += 1;
+            } else {
+                var pad = (max - min) * 0.1;
+                min = Math.max(-99.9, min - pad);
+                max += pad;
+            }
+            return { min: min, max: max };
+        }
+
+        function formatPerfAxisTick(v) {
+            var n = Number(v);
+            if (!isFinite(n)) return '';
+            if (n < -99.9) n = -99.9;
+            var abs = Math.abs(n);
+            var text = abs >= 10 ? String(Math.round(n)) : String(Math.round(n * 10) / 10);
+            return text + '%';
+        }
+
+        function syncPerfAxisChart() {
+            if (!perfChartInstance || !perfAxisInstance) return;
+            var area = perfChartInstance.chartArea;
+            if (!area) return;
+            var top = Math.round(area.top);
+            var bottom = Math.round(perfChartInstance.height - area.bottom);
+            var pad = perfAxisInstance.options.layout.padding || {};
+            if (pad.top === top && pad.bottom === bottom) {
+                perfAxisInstance.resize();
+                return;
+            }
+            perfAxisInstance.options.layout.padding = { top: top, right: 4, bottom: bottom, left: 4 };
+            perfAxisInstance.update('none');
+        }
+
         function renderPerfChart(portfolio) {
-            var ctx = document.getElementById('perfChartCanvas').getContext('2d');
+            var canvas = document.getElementById('perfChartCanvas');
+            var axisCanvas = document.getElementById('perfChartAxis');
+            if (!canvas || !axisCanvas) return;
+            var ctx = canvas.getContext('2d');
+            var axisCtx = axisCanvas.getContext('2d');
             var holdings = portfolio.holdings;
             var coins = Object.keys(holdings).filter(function(c) { return holdings[c].amount > 0; });
             var labels = [], values = [], colors = [];
@@ -5902,39 +6327,124 @@
                 var h = holdings[coin];
                 var price = getLivePrice(coin, h.avgBuy);
                 var pnlPct = h.avgBuy > 0 ? ((price - h.avgBuy) / h.avgBuy * 100) : 0;
+                if (pnlPct < -99.9) pnlPct = -99.9;
                 labels.push(getCoinSymbol(coin) || getCoinName(coin));
-                values.push(Math.abs(pnlPct));
+                values.push(pnlPct);
                 colors.push(pnlPct >= 0 ? '#4ade80' : '#f87171');
             });
 
+            var chartLabels = labels.length ? labels : ['—'];
+            var chartValues = values.length ? values : [0];
+            var chartColors = colors.length ? colors : ['#333'];
+            var yScale = computePerfYScale(chartValues);
+            sizePerfChartTrack(chartLabels.length);
+
+            var yGrid = {
+                color: function(c) {
+                    return c.tick && c.tick.value === 0
+                        ? 'rgba(255,255,255,0.28)'
+                        : 'rgba(255,255,255,0.04)';
+                },
+                lineWidth: function(c) {
+                    return c.tick && c.tick.value === 0 ? 1.5 : 1;
+                }
+            };
+
             if (perfChartInstance) {
-                perfChartInstance.data.labels = labels;
-                perfChartInstance.data.datasets[0].data = values;
-                perfChartInstance.data.datasets[0].backgroundColor = colors;
+                perfChartInstance.data.labels = chartLabels;
+                perfChartInstance.data.datasets[0].data = chartValues;
+                perfChartInstance.data.datasets[0].backgroundColor = chartColors;
+                perfChartInstance.options.scales.y.min = yScale.min;
+                perfChartInstance.options.scales.y.max = yScale.max;
+                perfChartInstance.resize();
                 perfChartInstance.update();
             } else {
                 perfChartInstance = new Chart(ctx, {
                     type: 'bar',
                     data: {
-                        labels: labels.length ? labels : ['—'],
+                        labels: chartLabels,
                         datasets: [{
-                            data: values.length ? values : [0],
-                            backgroundColor: colors.length ? colors : ['#333'],
-                            borderRadius: 6,
-                            barThickness: 16
+                            data: chartValues,
+                            backgroundColor: chartColors,
+                            borderRadius: 3,
+                            maxBarThickness: 8,
+                            barPercentage: 0.5,
+                            categoryPercentage: 0.65
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        resizeDelay: 80,
+                        animation: {
+                            duration: 280,
+                            onComplete: function() { syncPerfAxisChart(); }
+                        },
                         plugins: { legend: { display: false } },
                         scales: {
-                            x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10 } } },
-                            y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#71717a', font: { size: 10 },
-                                callback: function(v) { return v + '%'; } } }
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#71717a',
+                                    font: { size: 10 },
+                                    autoSkip: false,
+                                    maxRotation: 45,
+                                    minRotation: 0
+                                }
+                            },
+                            y: {
+                                min: yScale.min,
+                                max: yScale.max,
+                                border: { display: false },
+                                grid: yGrid,
+                                ticks: { display: false, padding: 0 },
+                                afterFit: function(axis) { axis.width = 0; }
+                            }
                         }
                     }
                 });
+            }
+
+            if (perfAxisInstance) {
+                perfAxisInstance.options.scales.y.min = yScale.min;
+                perfAxisInstance.options.scales.y.max = yScale.max;
+                syncPerfAxisChart();
+            } else {
+                perfAxisInstance = new Chart(axisCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: [''],
+                        datasets: [{ data: [0], backgroundColor: 'transparent', borderWidth: 0 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: { enabled: false }
+                        },
+                        scales: {
+                            x: { display: false },
+                            y: {
+                                min: yScale.min,
+                                max: yScale.max,
+                                grid: { drawOnChartArea: false, drawTicks: false },
+                                border: { display: false },
+                                ticks: {
+                                    color: '#71717a',
+                                    font: { size: 10 },
+                                    padding: 4,
+                                    maxTicksLimit: 6,
+                                    callback: formatPerfAxisTick
+                                },
+                                afterFit: function(axis) { axis.width = 64; }
+                            }
+                        },
+                        layout: { padding: { top: 0, right: 4, bottom: 0, left: 4 } }
+                    }
+                });
+                syncPerfAxisChart();
             }
         }
 
@@ -6088,8 +6598,12 @@
                 else if (!isCoinNameResolved(coin) && isNumericId(coin)) subParts.push('UCID ' + normalizeCoinKey(coin));
                 if (h.isScam) subParts.push('скам · ' + formatMoney(invested) + ' вложено');
                 else subParts.push(formatNumber(h.amount) + ' шт');
+                var locationLabel = getCoinLocation(coin);
+                var locationHtml = locationLabel
+                    ? '<button type="button" class="location-tag" title="Место хранения" onclick="event.stopPropagation();openLocationModal(\'' + jsEscape(coin) + '\')">' + escapeHtml(locationLabel) + '</button>'
+                    : '<button type="button" class="location-tag location-tag-empty" title="Указать биржу или кошелёк" onclick="event.stopPropagation();openLocationModal(\'' + jsEscape(coin) + '\')">+ биржа / кошелёк</button>';
                 var displayName = getCoinName(coin);
-                var searchHay = (displayName + ' ' + (sym || '') + ' ' + (ucid || '') + ' ' + coin)
+                var searchHay = (displayName + ' ' + (sym || '') + ' ' + (ucid || '') + ' ' + coin + ' ' + locationLabel)
                     .toLowerCase().replace(/"/g, '&quot;');
 
                 html += '<tr data-search="' + searchHay + '">' +
@@ -6097,7 +6611,8 @@
                         '<div class="coin-cell-main" onclick="selectPortfolioChartCoin(\'' + jsEscape(coin) + '\')" title="График ' + displayName + '">' +
                             '<div class="coin-avatar" style="background:linear-gradient(135deg,' + color + ',#38bdf8)">' + getCoinAvatar(coin) + '</div>' +
                             '<div><div class="coin-name">' + displayName + '</div>' +
-                            '<div class="coin-sub mono">' + subParts.join(' · ') + '</div></div>' +
+                            '<div class="coin-sub mono">' + subParts.join(' · ') + '</div>' +
+                            locationHtml + '</div>' +
                         '</div>' +
                         '<div class="coin-action-group">' +
                             '<button type="button" class="coin-action-btn" onclick="event.stopPropagation();openAlertModal(\'' + jsEscape(coin) + '\')" title="Уведомления по цене">🔔</button>' +
@@ -6251,6 +6766,7 @@
         loadSetupInfo();
         loadTvSymbolOverrides();
         renderTvSymbolOverridesList();
+        loadCoinLocationsLocal();
         loadPriceAlerts();
         initPwaInstall();
         refreshData();
@@ -6266,13 +6782,21 @@
                 document.documentElement.classList.toggle('narrow', w <= 380);
             }
             updateMobileLayout();
+            function resizePerfChart() {
+                if (!perfChartInstance) return;
+                sizePerfChartTrack(perfChartInstance.data.labels.length);
+                perfChartInstance.resize();
+                syncPerfAxisChart();
+            }
             window.addEventListener('resize', function() {
                 updateMobileLayout();
                 scheduleAllocationHeightSync();
+                resizePerfChart();
             });
             window.addEventListener('orientationchange', function() {
                 updateMobileLayout();
                 scheduleAllocationHeightSync();
+                resizePerfChart();
             });
             if (typeof ResizeObserver === 'function') {
                 var leftCol = document.querySelector('.dashboard-grid .col-left');

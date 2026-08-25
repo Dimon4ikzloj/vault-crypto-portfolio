@@ -202,6 +202,43 @@ function addUserAsset(coin) {
   return saveUserAssets(list);
 }
 
+const COIN_LOCATIONS_PROP = 'COIN_LOCATIONS';
+
+function getCoinLocations() {
+  const saved = PropertiesService.getUserProperties().getProperty(COIN_LOCATIONS_PROP);
+  if (!saved) return {};
+  try {
+    const parsed = JSON.parse(saved);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveCoinLocation(coin, location, aliases) {
+  const key = normalizeCoinKey(coin);
+  if (!key) return { success: false, error: 'Монета не указана' };
+
+  const label = String(location || '').trim();
+  if (label.length > 48) return { success: false, error: 'Слишком длинная надпись (макс. 48 символов)' };
+
+  const map = getCoinLocations();
+  const keys = {};
+  keys[key] = true;
+  (aliases || []).forEach(function(raw) {
+    const alias = normalizeCoinKey(raw);
+    if (alias) keys[alias] = true;
+  });
+
+  Object.keys(keys).forEach(function(k) {
+    if (label) map[k] = label;
+    else delete map[k];
+  });
+
+  PropertiesService.getUserProperties().setProperty(COIN_LOCATIONS_PROP, JSON.stringify(map));
+  return { success: true, locations: map };
+}
+
 function syncUserAssetsFromTransactions(transactions) {
   const list = getUserAssets();
   const seen = {};
@@ -695,7 +732,8 @@ function getTransactions() {
       missingPrices: missingPrices,
       sheetRows: sheet.getLastRow(),
       sheetName: sheet.getName(),
-      spreadsheetUrl: ss.getUrl()
+      spreadsheetUrl: ss.getUrl(),
+      coinLocations: getCoinLocations()
     };
   } catch (e) {
     return buildTransactionsError(String(e));
@@ -741,6 +779,7 @@ function buildTransactionsError(message) {
     userAssets: getUserAssets(),
     manualPrices: getManualPrices(),
     manualPricesList: getManualPricesList(),
+    coinLocations: getCoinLocations(),
     error: message,
     priceUpdate: { success: false, errors: [message] }
   };
