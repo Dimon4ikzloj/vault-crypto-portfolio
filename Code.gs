@@ -3,7 +3,7 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.0';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
@@ -11,7 +11,6 @@ const GITHUB_REPO_URL = 'https://github.com/' + GITHUB_OWNER + '/' + GITHUB_REPO
 const APP_UPDATE_CACHE_KEY = 'APP_GITHUB_UPDATE_INFO';
 const APP_UPDATE_CACHE_SEC = 1200;
 const APP_UPDATE_NOTIFIED_PROP = 'APP_UPDATE_NOTIFIED_VERSION';
-const APP_AUTO_APPLY_PROP = 'APP_AUTO_APPLY_GITHUB';
 const PORTFOLIOS_PROP = 'PORTFOLIOS_REGISTRY';
 const DEFAULT_PORTFOLIO_ID = 'default';
 const DEFAULT_PORTFOLIO_NAME = 'Портфель';
@@ -3079,7 +3078,7 @@ function updateAllCoins() {
     }
 
     try {
-      maybeNotifyOrApplyGithubUpdate_();
+      maybeNotifyGithubUpdate_();
     } catch (updateErr) {
       Logger.log('github update check failed: ' + updateErr);
     }
@@ -4120,23 +4119,11 @@ function testApiForSui() {
 }
 
 /**
- * Проверка версии на GitHub и (по желанию) применение файлов в этот проект.
- * Google сам не подтягивает git: веб-приложение заморожено в развёртывании.
- * Кнопка «Применить» обновляет исходники через Apps Script API и двигает /exec.
+ * Сверяет локальную APP_VERSION с файлом VERSION на GitHub.
+ * Обновление кода — только вручную: скопировать Code.gs и index.html, затем новая версия развёртывания.
  */
 function getAppUpdateInfo(forceRefresh) {
   return fetchGithubUpdateInfo_(!!forceRefresh);
-}
-
-function setAutoApplyGithubUpdate(enabled) {
-  PropertiesService.getUserProperties().setProperty(APP_AUTO_APPLY_PROP, enabled ? '1' : '0');
-  return {
-    success: true,
-    autoApply: !!enabled,
-    message: enabled
-      ? 'Новые версии с GitHub будут применяться сами, когда сработает часовой триггер.'
-      : 'Автоприменение выключено. Останется баннер и уведомление.'
-  };
 }
 
 function fetchGithubUpdateInfo_(forceRefresh) {
@@ -4159,7 +4146,6 @@ function fetchGithubUpdateInfo_(forceRefresh) {
     commitUrl: '',
     repoUrl: GITHUB_REPO_URL,
     compareUrl: GITHUB_REPO_URL + '/commits/' + GITHUB_BRANCH,
-    autoApply: PropertiesService.getUserProperties().getProperty(APP_AUTO_APPLY_PROP) === '1',
     error: ''
   };
 
@@ -4235,14 +4221,9 @@ function compareSemver_(a, b) {
   return 0;
 }
 
-function maybeNotifyOrApplyGithubUpdate_() {
+function maybeNotifyGithubUpdate_() {
   const info = fetchGithubUpdateInfo_(true);
   if (!info.hasUpdate || !info.remoteVersion) return info;
-
-  if (info.autoApply) {
-    const applied = applyGithubUpdate();
-    if (applied && applied.success) return applied;
-  }
 
   const props = PropertiesService.getUserProperties();
   if (props.getProperty(APP_UPDATE_NOTIFIED_PROP) === info.remoteVersion) return info;
@@ -4252,7 +4233,7 @@ function maybeNotifyOrApplyGithubUpdate_() {
     const lines = [
       'Доступно обновление Vault ' + info.remoteVersion + ' (у вас ' + info.localVersion + ').',
       info.commitMessage ? ('Коммит: ' + info.commitMessage) : '',
-      'Откройте портфель и нажмите «Применить обновление», либо скопируйте Code.gs и index.html с GitHub.',
+      'Обновитесь вручную: скопируйте Code.gs и index.html с GitHub в Apps Script (ключ CMC не затирайте), затем Развернуть → Управление развёртываниями → Новая версия.',
       info.repoUrl
     ].filter(Boolean);
     try {
@@ -4266,260 +4247,13 @@ function maybeNotifyOrApplyGithubUpdate_() {
   return info;
 }
 
-function githubUpdateAuthHelp_(apiDetail) {
-  const parts = [
-    'Кнопка в браузере крутит старое развёртывание — новые scopes она не видит.',
-    'Обновление нужно применить в РЕДАКТОРЕ Apps Script:',
-    '1) appsscript.json сохранён, в нём есть script.projects и script.deployments.',
-    '2) Откройте https://script.google.com/home/usersettings и включите «Google Apps Script API».',
-    '3) authorizeGithubUpdate → ▶ Выполнить → в окне Google нажмите Разрешить.',
-    '4) Затем в том же списке выберите applyGithubUpdate → ▶ Выполнить (не кнопку на сайте).',
-    '5) Развернуть → Управление развёртываниями → карандаш → Новая версия, обновите портфель.'
-  ];
-  if (apiDetail) parts.push('Ответ API: ' + apiDetail);
-  return parts.join(' ');
-}
-
-function scriptApiErrorDetail_(result) {
-  if (!result) return '';
-  const err = result.body && result.body.error;
-  const msg = (err && err.message) || String(result.text || '').replace(/\s+/g, ' ').substring(0, 240);
-  return 'HTTP ' + result.code + (msg ? (': ' + msg) : '');
-}
-
-/**
- * Один раз в редакторе Apps Script, ПОСЛЕ того как в appsscript.json есть
- * oauthScopes script.projects и script.deployments:
- * authorizeGithubUpdate → ▶ Выполнить → в окне Google нажать Разрешить.
- */
-function authorizeGithubUpdate() {
-  const result = scriptApi_('get', '/projects/' + ScriptApp.getScriptId());
-  Logger.log('authorizeGithubUpdate HTTP ' + result.code + ' ' + String(result.text || '').substring(0, 500));
-  if (result.code !== 200) {
-    throw new Error(githubUpdateAuthHelp_(scriptApiErrorDetail_(result)));
-  }
-  return {
-    success: true,
-    status: 200,
-    message: 'Доступ к проекту Apps Script выдан. Теперь в портфеле можно нажать «Применить обновление».'
-  };
-}
-
-function applyGithubUpdate() {
-  const info = fetchGithubUpdateInfo_(true);
-  if (!info.hasUpdate) {
-    return {
-      success: false,
-      upToDate: true,
-      localVersion: APP_VERSION,
-      remoteVersion: info.remoteVersion || APP_VERSION,
-      message: 'У вас уже актуальная версия ' + APP_VERSION + '.'
-    };
-  }
-
-  const codeRes = githubFetch_(
-    'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/Code.gs'
-  );
-  const htmlRes = githubFetch_(
-    'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/index.html'
-  );
-  if (codeRes.code !== 200 || htmlRes.code !== 200) {
-    return {
-      success: false,
-      error: 'Не удалось скачать файлы с GitHub (Code.gs HTTP ' + codeRes.code + ', index.html HTTP ' + htmlRes.code + ').'
-    };
-  }
-
-  const project = scriptApi_('get', '/projects/' + ScriptApp.getScriptId() + '/content');
-  if (isScriptApiAuthError_(project.code, project.text)) {
-    return {
-      success: false,
-      needsAuth: true,
-      error: githubUpdateAuthHelp_(scriptApiErrorDetail_(project))
-    };
-  }
-  if (project.code !== 200 || !project.body || !project.body.files) {
-    return {
-      success: false,
-      needsAuth: project.code === 403 || project.code === 401,
-      error: 'Apps Script API не отдал файлы проекта. ' + scriptApiErrorDetail_(project)
-    };
-  }
-
-  const files = project.body.files.slice();
-  let currentKey = API_KEY;
-  files.forEach(function(file) {
-    if (['Code', 'Code.gs'].indexOf(file.name) === -1) return;
-    const fromFile = extractApiKey_(file.source);
-    if (fromFile && fromFile !== 'YOUR_API_KEY') currentKey = fromFile;
-  });
-  upsertProjectFile_(files, ['Code', 'Code.gs'], 'SERVER_JS', replaceApiKey_(codeRes.text, currentKey));
-  upsertProjectFile_(files, ['index', 'index.html'], 'HTML', htmlRes.text);
-
-  const manifestRes = githubFetch_(
-    'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/appsscript.json'
-  );
-  if (manifestRes.code === 200) {
-    mergeAppsscriptManifest_(files, manifestRes.text);
-  }
-
-  const saved = scriptApi_('put', '/projects/' + ScriptApp.getScriptId() + '/content', { files: files });
-  if (saved.code !== 200) {
-    return {
-      success: false,
-      needsAuth: isScriptApiAuthError_(saved.code, saved.text),
-      error: 'Не удалось записать файлы в проект (HTTP ' + saved.code + ').'
-    };
-  }
-
-  let deployed = false;
-  let needsRedeploy = true;
-  const version = scriptApi_('post', '/projects/' + ScriptApp.getScriptId() + '/versions', {
-    description: 'Vault ' + info.remoteVersion + ' с GitHub'
-  });
-  if (version.code === 200 && version.body && version.body.versionNumber) {
-    const versionNumber = version.body.versionNumber;
-    const deployments = scriptApi_('get', '/projects/' + ScriptApp.getScriptId() + '/deployments');
-    if (deployments.code === 200 && deployments.body && deployments.body.deployments) {
-      const webApps = deployments.body.deployments.filter(function(d) {
-        const entries = d.entryPoints || [];
-        const isWeb = entries.some(function(ep) { return ep.entryPointType === 'WEB_APP'; });
-        return isWeb && d.deploymentConfig && d.deploymentConfig.versionNumber;
-      });
-      let updated = 0;
-      webApps.forEach(function(d) {
-        const cfg = d.deploymentConfig || {};
-        const put = scriptApi_('put', '/projects/' + ScriptApp.getScriptId() + '/deployments/' + d.deploymentId, {
-          deploymentConfig: {
-            versionNumber: versionNumber,
-            manifestFileName: cfg.manifestFileName || 'appsscript',
-            description: cfg.description || ('Vault ' + info.remoteVersion)
-          }
-        });
-        if (put.code === 200) updated++;
-      });
-      if (updated > 0) {
-        deployed = true;
-        needsRedeploy = false;
-      }
-    }
-  }
-
-  try {
-    CacheService.getScriptCache().remove(APP_UPDATE_CACHE_KEY);
-  } catch (e) {}
-  PropertiesService.getUserProperties().setProperty(APP_UPDATE_NOTIFIED_PROP, info.remoteVersion);
-
-  return {
-    success: true,
-    deployed: deployed,
-    needsRedeploy: needsRedeploy,
-    localVersion: APP_VERSION,
-    remoteVersion: info.remoteVersion,
-    message: needsRedeploy
-      ? 'Файлы обновлены в редакторе. Чтобы веб-ссылка подхватила код: Развернуть → Управление развёртываниями → карандаш → Новая версия. Затем обновите страницу.'
-      : 'Обновление ' + info.remoteVersion + ' применено. Обновите страницу.'
-  };
-}
-
-function extractApiKey_(source) {
-  const text = source || '';
-  const match = String(text).match(/const API_KEY\s*=\s*["']([^"']*)["']/);
-  return match ? match[1] : '';
-}
-
-function replaceApiKey_(source, apiKey) {
-  const key = apiKey && apiKey !== 'YOUR_API_KEY' ? apiKey : API_KEY;
-  if (!key || key === 'YOUR_API_KEY') return source;
-  if (/const API_KEY\s*=/.test(source)) {
-    return String(source).replace(
-      /const API_KEY\s*=\s*["'][^"']*["']\s*;/,
-      'const API_KEY = ' + JSON.stringify(key) + ';'
-    );
-  }
-  return 'const API_KEY = ' + JSON.stringify(key) + ';\n' + source;
-}
-
-function upsertProjectFile_(files, names, type, source) {
-  for (let i = 0; i < files.length; i++) {
-    if (names.indexOf(files[i].name) !== -1) {
-      files[i].source = source;
-      files[i].type = files[i].type || type;
-      return;
-    }
-  }
-  files.push({ name: names[0], type: type, source: source });
-}
-
-function mergeAppsscriptManifest_(files, remoteSource) {
-  let current = null;
-  for (let i = 0; i < files.length; i++) {
-    if (files[i].name === 'appsscript') {
-      current = files[i];
-      break;
-    }
-  }
-  let remote = {};
-  let local = {};
-  try { remote = JSON.parse(remoteSource); } catch (e) { return; }
-  if (current && current.source) {
-    try { local = JSON.parse(current.source); } catch (e) { local = {}; }
-  }
-  const merged = {};
-  Object.keys(local).forEach(function(k) { merged[k] = local[k]; });
-  ['exceptionLogging', 'runtimeVersion', 'dependencies'].forEach(function(k) {
-    if (merged[k] === undefined && remote[k] !== undefined) merged[k] = remote[k];
-  });
-  if (!merged.timeZone) merged.timeZone = local.timeZone || remote.timeZone;
-  const scopes = [];
-  function addScopes(list) {
-    (list || []).forEach(function(s) {
-      if (s && scopes.indexOf(s) === -1) scopes.push(s);
-    });
-  }
-  addScopes(local.oauthScopes);
-  addScopes(remote.oauthScopes);
-  if (scopes.length) merged.oauthScopes = scopes;
-  const source = JSON.stringify(merged, null, 2);
-  if (current) current.source = source;
-  else files.push({ name: 'appsscript', type: 'JSON', source: source });
-}
-
-function scriptApi_(method, path, payload) {
-  const options = {
-    method: String(method || 'get').toLowerCase(),
-    muteHttpExceptions: true,
-    headers: {
-      Authorization: 'Bearer ' + ScriptApp.getOAuthToken(),
-      Accept: 'application/json'
-    }
-  };
-  if (payload) {
-    options.contentType = 'application/json';
-    options.payload = JSON.stringify(payload);
-  }
-  const response = UrlFetchApp.fetch('https://script.googleapis.com/v1' + path, options);
-  const text = response.getContentText() || '';
-  let body = {};
-  try { body = JSON.parse(text); } catch (e) {}
-  return { code: response.getResponseCode(), body: body, text: text };
-}
-
-function isScriptApiAuthError_(code, text) {
-  const blob = String(text || '').toLowerCase();
-  return code === 401 || code === 403 ||
-    blob.indexOf('permission_denied') !== -1 ||
-    blob.indexOf('script.projects') !== -1 ||
-    blob.indexOf('script.deployments') !== -1;
-}
-
 /**
  * Первый запуск в редакторе Apps Script:
  * 1) authorizeExternalRequests → Разрешить
  * 2) authorizeSendMail → Разрешить (письма с алертами по цене)
  * 3) setupAutoUpdate → Разрешить (фоновая синхронизация каждый час, API — раз в 4 ч.)
- * 4) authorizeGithubUpdate → Разрешить (кнопка «Применить обновление» с GitHub)
  */
+
 function setupAutoUpdate() {
   const triggers = ScriptApp.getProjectTriggers();
   for (const trigger of triggers) {

@@ -2616,7 +2616,7 @@
                         </select>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal()" title="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.1.1</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.0</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -2676,22 +2676,21 @@
                 </div>
 
                 <div class="update-banner" id="updateBanner">
-                    <h3>Доступно обновление Vault</h3>
+                    <h3>Доступна новая версия</h3>
                     <p>
-                        У вас <strong id="updateLocalVer">—</strong>, на GitHub — <strong id="updateRemoteVer">—</strong>.
+                        У вас <strong id="updateLocalVer">—</strong>, актуальная — <strong id="updateRemoteVer">—</strong>.
+                        Обновитесь до актуальной версии вручную.
                     </p>
                     <p id="updateCommitMsg" style="display:none;"></p>
-                    <p style="font-size:12px;color:var(--text-muted);margin:0;">
-                        Таблица, сделки и API-ключ не затрагиваются. Код в Apps Script заменится файлами с GitHub.
-                    </p>
+                    <ol style="margin:10px 0 0 18px;color:var(--text-secondary);font-size:13px;line-height:1.7;">
+                        <li>Откройте GitHub и скопируйте <strong>Code.gs</strong> и <strong>index.html</strong> в Apps Script. Строку с ключом CoinMarketCap не затирайте.</li>
+                        <li><strong>Развернуть → Управление развёртываниями → карандаш → Новая версия</strong></li>
+                        <li>Обновите страницу портфеля</li>
+                    </ol>
                     <div class="auth-actions">
-                        <button type="button" class="btn btn-primary" onclick="applyGithubUpdateUi()">Применить обновление</button>
-                        <a class="btn btn-outline" id="updateGithubLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">Открыть GitHub</a>
+                        <a class="btn btn-primary" id="updateGithubLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">Открыть GitHub</a>
                         <button type="button" class="btn btn-ghost" onclick="dismissUpdateBanner()">Позже</button>
                     </div>
-                    <p id="updateAuthHint" style="display:none;font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
-                        Кнопка в браузере не видит новые разрешения, пока нет нового развёртывания. Включите API: <a href="https://script.google.com/home/usersettings" target="_blank" rel="noopener" style="color:var(--cyan);">script.google.com/home/usersettings</a>. Затем в редакторе: <strong>authorizeGithubUpdate</strong> → Разрешить, потом <strong>applyGithubUpdate</strong> → ▶ Выполнить. После этого: Развернуть → Управление развёртываниями → Новая версия.
-                    </p>
                 </div>
 
                 <div class="dashboard-grid">
@@ -2961,13 +2960,9 @@
                                 <div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
                                     <label class="form-label">Версия приложения</label>
                                     <p class="app-version-meta" id="appVersionMeta">Загрузка…</p>
-                                    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-secondary);margin:0 0 12px;cursor:pointer;">
-                                        <input type="checkbox" id="autoApplyGithub" style="margin-top:2px;" onchange="saveAutoApplyGithubUi()">
-                                        <span>Самим применять обновления с GitHub (часовой триггер). Нужно один раз выдать authorizeGithubUpdate.</span>
-                                    </label>
+                                    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px;line-height:1.6;">Если на GitHub новее — в шапке появится баннер. Обновление только вручную: скопируйте файлы из репозитория и сделайте новую версию развёртывания. Сделки и ключ CMC не трогайте.</p>
                                     <div class="app-version-row">
                                         <button type="button" class="btn btn-secondary btn-sm" onclick="checkAppUpdate(true)">Проверить обновления</button>
-                                        <button type="button" class="btn btn-primary btn-sm" id="applyUpdateBtn" style="display:none" onclick="applyGithubUpdateUi()">Применить обновление</button>
                                         <a class="btn btn-outline btn-sm" id="githubRepoLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">GitHub</a>
                                     </div>
                                 </div>
@@ -3484,7 +3479,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.1.1';
+        var VAULT_APP_VERSION = '1.2.0';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
 
@@ -6051,12 +6046,6 @@
             setAppVersionBadge(localVer, !!info.hasUpdate);
             renderAppVersionMeta(info);
 
-            var applyBtn = document.getElementById('applyUpdateBtn');
-            if (applyBtn) applyBtn.style.display = info.hasUpdate ? '' : 'none';
-
-            var autoBox = document.getElementById('autoApplyGithub');
-            if (autoBox) autoBox.checked = !!info.autoApply;
-
             ['githubRepoLink', 'updateGithubLink'].forEach(function(id) {
                 var a = document.getElementById(id);
                 if (a && info.repoUrl) a.href = info.repoUrl;
@@ -6097,50 +6086,6 @@
                     if (force) showToast('Не удалось проверить GitHub: ' + ((err && err.message) || err), 'error');
                 })
                 .getAppUpdateInfo(!!force);
-        }
-
-        function saveAutoApplyGithubUi() {
-            var box = document.getElementById('autoApplyGithub');
-            var enabled = !!(box && box.checked);
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    if (res && res.success) showToast(res.message || 'Сохранено');
-                    else showToast((res && res.error) || 'Не удалось сохранить', 'error');
-                })
-                .withFailureHandler(function(err) {
-                    showToast('Не удалось сохранить: ' + ((err && err.message) || err), 'error');
-                    if (box) box.checked = !enabled;
-                })
-                .setAutoApplyGithubUpdate(enabled);
-        }
-
-        function applyGithubUpdateUi() {
-            if (!confirm('Код в Apps Script будет заменён файлами с GitHub.\nСделки, таблица и API-ключ CoinMarketCap сохранятся.\nПродолжить?')) return;
-            showLoading(true, 'Качаю обновление с GitHub...');
-            google.script.run
-                .withSuccessHandler(function(res) {
-                    showLoading(false);
-                    var hint = document.getElementById('updateAuthHint');
-                    if (res && res.needsAuth && hint) hint.style.display = '';
-                    if (res && res.success) {
-                        showToast(res.message || 'Обновление применено');
-                        if (!res.needsRedeploy) {
-                            setTimeout(function() { location.reload(); }, 1200);
-                        }
-                    } else if (res && res.upToDate) {
-                        showToast(res.message || 'Уже актуальная версия');
-                        checkAppUpdate(true);
-                    } else {
-                        showToast((res && res.error) || 'Не удалось применить обновление', 'error');
-                    }
-                })
-                .withFailureHandler(function(err) {
-                    showLoading(false);
-                    var hint = document.getElementById('updateAuthHint');
-                    if (hint) hint.style.display = '';
-                    showToast('Не удалось применить обновление: ' + ((err && err.message) || err), 'error');
-                })
-                .applyGithubUpdate();
         }
 
         var deferredPwaPrompt = null;
