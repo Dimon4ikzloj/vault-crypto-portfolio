@@ -2207,26 +2207,6 @@
             box-shadow: 0 4px 16px var(--cyan-glow);
         }
 
-        .mobile-search-bar {
-            padding: 10px 16px;
-            border-bottom: 1px solid var(--border);
-            background: rgba(10, 10, 10, 0.95);
-            position: sticky;
-            top: 57px;
-            z-index: 40;
-        }
-
-        .mobile-search-box {
-            min-width: 0;
-            width: 100%;
-            border-radius: var(--radius-sm);
-            padding: 12px 14px;
-        }
-
-        .mobile-search-box input {
-            font-size: 16px;
-        }
-
         #home, #positions, #history, #settingsPanel, #workspaceTools {
             scroll-margin-top: 68px;
         }
@@ -2791,7 +2771,7 @@
                         </button>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal('create')" title="Создать портфель" aria-label="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.5</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.6</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -2809,13 +2789,6 @@
                     <button class="btn btn-primary btn-sm desktop-only" onclick="openModal()">+ Новая сделка</button>
                 </div>
             </header>
-
-            <div class="mobile-search-bar mobile-only">
-                <div class="search-box mobile-search-box">
-                    <span style="color:var(--text-muted)">⌕</span>
-                    <input type="text" placeholder="Поиск позиций..." id="searchInputMobile" oninput="syncSearchFromMobile(this)">
-                </div>
-            </div>
 
             <div class="page-content">
                 <div class="auth-banner" id="authBanner">
@@ -2836,7 +2809,7 @@
                     <h3>⏱ Фоновая синхронизация не включена</h3>
                     <p style="color:var(--text-secondary);font-size:13px;margin-bottom:8px;">
                         Google не позволяет включить её из браузера — нужна одноразовая настройка в редакторе Apps Script.
-                        Пока приложение открыто, цены всё равно обновляются автоматически раз в 4 часа.
+                        Пока приложение открыто, цены всё равно обновляются автоматически раз в 2 часа.
                     </p>
                     <ol>
                         <li>Нажми <strong>«Открыть Apps Script»</strong></li>
@@ -3063,7 +3036,7 @@
                                 <div class="promo-icon">⚡</div>
                                 <div class="promo-copy">
                                 <div class="promo-title">Котировки CMC</div>
-                                <div class="promo-text" id="priceCacheStatus">Цены из кэша. Имена монет сохраняются навсегда после первой синхронизации. API — раз в 4 ч.</div>
+                                <div class="promo-text" id="priceCacheStatus">Цены из кэша. Имена монет сохраняются навсегда после первой синхронизации. API — раз в 2 ч.</div>
                                 </div>
                             </div>
                         </div>
@@ -3156,7 +3129,7 @@
                                         <a id="spreadsheetLink" href="#" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none;">Открыть Google Таблицу</a> — <span id="dealsSheetHint">сделки текущего портфеля на отдельном листе</span>
                                     </p>
                                     <button type="button" class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="runDiagnostics()">Проверить данные сделок</button>
-                                    <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="forceSyncPrices()" title="Игнорирует 4-часовой лимит — использовать только для проверки">⚡ Принудительная синхронизация (тест)</button>
+                                    <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="forceSyncPrices()" title="Игнорирует 2-часовой лимит — использовать только для проверки">⚡ Принудительная синхронизация (тест)</button>
                                 </div>
                                 <div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
                                     <label class="form-label">График TradingView — другая биржа</label>
@@ -3658,7 +3631,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.2.5';
+        var VAULT_APP_VERSION = '1.2.6';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
         var portfolioModalMode = 'create';
@@ -3879,19 +3852,10 @@
 
         function getSearchQuery() {
             var desktop = document.getElementById('searchInput');
-            var mobile = document.getElementById('searchInputMobile');
-            return ((desktop && desktop.value) || (mobile && mobile.value) || '').toUpperCase();
+            return ((desktop && desktop.value) || '').toUpperCase();
         }
 
-        function syncSearchFromDesktop(input) {
-            var mobile = document.getElementById('searchInputMobile');
-            if (mobile) mobile.value = input.value;
-            filterPositions();
-        }
-
-        function syncSearchFromMobile(input) {
-            var desktop = document.getElementById('searchInput');
-            if (desktop) desktop.value = input.value;
+        function syncSearchFromDesktop() {
             filterPositions();
         }
 
@@ -4025,6 +3989,11 @@
             return sym && sym !== coin ? sym : '';
         }
 
+        function priceApiIntervalLabel() {
+            var hours = (priceCacheInfo && priceCacheInfo.intervalHours) || 2;
+            return 'раз в ' + hours + ' ч.';
+        }
+
         function formatSyncDateTime(ts) {
             if (!ts) return '—';
             return new Date(ts).toLocaleString('ru-RU', {
@@ -4051,7 +4020,7 @@
             var auto = info && info.autoSync;
             if (auto) {
                 if (auto.triggerInstalled) {
-                    var autoLine = 'Фоновая синхронизация: активна (API раз в 4 ч.)';
+                    var autoLine = 'Фоновая синхронизация: активна (API ' + priceApiIntervalLabel() + ')';
                     if (auto.lastTriggerRunAt) {
                         autoLine += ' · триггер ' + formatSyncDateTime(auto.lastTriggerRunAt);
                     }
@@ -4088,7 +4057,7 @@
                 return;
             }
             if (info.lastFetchAt) {
-                el.textContent = 'Котировки из кэша (обновлены ' + formatCacheTime(info.lastFetchAt) + '). API — раз в 4 ч.';
+                el.textContent = 'Котировки из кэша (обновлены ' + formatCacheTime(info.lastFetchAt) + '). API — ' + priceApiIntervalLabel();
             } else {
                 el.textContent = 'Котировки из кэша. Нажмите «Синхронизировать» для первой загрузки с API.';
             }
@@ -6066,7 +6035,7 @@
                             showToast('Для «' + ambiguous.join(', ') + '» укажите UCID вместо тикера (несколько монет с этим символом)', 'error');
                         }
                         if (options.isSync && result.priceUpdate && result.priceUpdate.throttled) {
-                            showApiError('Запрос к API отложен (не чаще 1 раза в 4 ч). Следующая попытка: ' +
+                            showApiError('Запрос к API отложен (не чаще 1 раза в 2 ч). Следующая попытка: ' +
                                 formatCacheTime(priceCacheInfo && priceCacheInfo.nextFetchAt) +
                                 '. Пока без цены: ' + missing.join(', '));
                         } else {

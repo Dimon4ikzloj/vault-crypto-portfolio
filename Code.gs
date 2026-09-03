@@ -3,7 +3,7 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.2.5';
+const APP_VERSION = '1.2.6';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
@@ -17,9 +17,10 @@ const DEFAULT_PORTFOLIO_NAME = 'Портфель';
 const USER_ASSETS_PROP = 'USER_ASSETS_LIST';
 const MAX_PORTFOLIOS = 20;
 
-// Кэш котировок: не чаще 1 раза в 4 часа (лимит бесплатного CMC)
-const PRICE_CACHE_TTL_SEC = 14400;
-const PRICE_FETCH_INTERVAL_MS = 4 * 60 * 60 * 1000;
+// Кэш котировок: запрос к CMC не чаще 1 раза в 2 часа
+const PRICE_FETCH_INTERVAL_HOURS = 2;
+const PRICE_FETCH_INTERVAL_MS = PRICE_FETCH_INTERVAL_HOURS * 60 * 60 * 1000;
+const PRICE_CACHE_TTL_SEC = (PRICE_FETCH_INTERVAL_HOURS + 1) * 3600;
 
 // Известные UCID для надёжного получения цены по тикеру
 const KNOWN_COIN_IDS = {
@@ -1026,7 +1027,7 @@ function getTransactions() {
 }
 
 /**
- * Загрузка портфеля + авто-синхронизация при открытии, если прошло ≥4 ч с последнего API-запроса.
+ * Загрузка портфеля + авто-синхронизация при открытии, если прошло ≥2 ч с последнего API-запроса.
  */
 function getTransactionsWithAutoSync() {
   let priceUpdate = {
@@ -1071,8 +1072,8 @@ function buildTransactionsError(message) {
 }
 
 /**
- * Единственная точка запроса цен к CMC: один пакетный запрос, не чаще 1 раза в 4 часа.
- * skipThrottle=true игнорирует 4-часовой лимит (кнопка «Принудительная синхронизация»
+ * Единственная точка запроса цен к CMC: один пакетный запрос, не чаще 1 раза в 2 часа.
+ * skipThrottle=true игнорирует 2-часовой лимит (кнопка «Принудительная синхронизация»
  * для проверки работоспособности — использовать редко, чтобы не исчерпать лимит CMC).
  */
 function syncPortfolioPrices(skipThrottle) {
@@ -1197,7 +1198,7 @@ function syncAndGetTransactions() {
 }
 
 /**
- * Принудительная синхронизация БЕЗ учёта 4-часового троттлинга (кнопка
+ * Принудительная синхронизация БЕЗ учёта 2-часового троттлинга (кнопка
  * «Принудительная синхронизация» — для проверки/тестирования, не злоупотреблять).
  */
 function forceSyncAndGetTransactions() {
@@ -1685,7 +1686,7 @@ function updateTransaction(data) {
 }
 
 /**
- * Реализация подсистемы CoinMarketCap API & кэширования (не чаще 1 раза в 4 часа)
+ * Реализация подсистемы CoinMarketCap API & кэширования (не чаще 1 раза в 2 часа)
  */
 function getLastPriceFetchTime() {
   return parseInt(PropertiesService.getScriptProperties().getProperty('LAST_PRICE_FETCH_MS') || '0', 10);
@@ -1709,7 +1710,7 @@ function canCallPriceApiNow() {
 }
 
 /**
- * Сбрасывает 4-часовой троттлинг API вручную (запусти в редакторе Apps Script,
+ * Сбрасывает 2-часовой троттлинг API вручную (запусти в редакторе Apps Script,
  * если нужно проверить синхронизацию сразу после исправления кода, не дожидаясь таймера).
  */
 function resetSyncThrottle() {
@@ -1788,7 +1789,7 @@ function ensureAutoUpdateTrigger() {
       installed: true,
       created: true,
       count: 1,
-      message: 'Фоновая синхронизация включена (проверка каждый час, API — раз в 4 ч.)'
+      message: 'Фоновая синхронизация включена (проверка каждый час, API — раз в 2 ч.)'
     };
   } catch (e) {
     return { installed: false, created: false, error: formatTriggerError(e) };
@@ -2626,7 +2627,7 @@ function CRYPTO(value) {
 }
 
 /**
- * Загрузка цен для портфеля: просмотр — только кэш; API — не чаще 1 раза в 4 часа, пакетами
+ * Загрузка цен для портфеля: просмотр — только кэш; API — не чаще 1 раза в 2 часа, пакетами
  */
 function fetchPricesForCoins(coins, forceRefresh) {
   if (!API_KEY || API_KEY === "YOUR_API_KEY") {
@@ -2898,7 +2899,7 @@ function checkApiAccess() {
   const info = getPriceCacheInfo();
   return {
     ok: true,
-    message: 'Ключ задан. Цены обновляются кнопкой «Синхронизировать» (не чаще 1 раза в 4 ч).' +
+    message: 'Ключ задан. Цены обновляются кнопкой «Синхронизировать» (не чаще 1 раза в 2 ч).' +
       (info.lastFetchAt ? ' Последнее обновление: ' + new Date(info.lastFetchAt).toLocaleString('ru-RU') + '.' : '')
   };
 }
@@ -3039,7 +3040,7 @@ function storeCoinPrice(coinData, cache) {
 
 /**
  * Вызывается триггером каждый час (см. setupAutoUpdate / ensureAutoUpdateTrigger).
- * Запрос к CMC — не чаще раза в 4 часа (canCallPriceApiNow).
+ * Запрос к CMC — не чаще раза в 2 часа (canCallPriceApiNow).
  */
 function updateAllCoins() {
   const props = PropertiesService.getScriptProperties();
@@ -4256,7 +4257,7 @@ function maybeNotifyGithubUpdate_() {
  * Первый запуск в редакторе Apps Script:
  * 1) authorizeExternalRequests → Разрешить
  * 2) authorizeSendMail → Разрешить (письма с алертами по цене)
- * 3) setupAutoUpdate → Разрешить (фоновая синхронизация каждый час, API — раз в 4 ч.)
+ * 3) setupAutoUpdate → Разрешить (фоновая синхронизация каждый час, API — раз в 2 ч.)
  */
 
 function setupAutoUpdate() {
@@ -4267,7 +4268,7 @@ function setupAutoUpdate() {
   ScriptApp.newTrigger('updateAllCoins').timeBased().everyHours(1).create();
   return {
     success: true,
-    message: 'Триггер установлен: проверка каждый час, запрос к CoinMarketCap — не чаще раза в 4 часа.',
+    message: 'Триггер установлен: проверка каждый час, запрос к CoinMarketCap — не чаще раза в 2 часа.',
     autoSync: getAutoSyncStatus()
   };
 }
