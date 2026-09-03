@@ -164,9 +164,59 @@
         .breadcrumb {
             font-size: 14px;
             color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .breadcrumb span { color: var(--text); font-weight: 500; }
+
+        .portfolio-switcher {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .portfolio-select {
+            max-width: 180px;
+            padding: 5px 10px;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            color: var(--text);
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+        }
+
+        .portfolio-select:focus {
+            outline: none;
+            border-color: var(--cyan);
+        }
+
+        .portfolio-add-btn {
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--cyan);
+            font-size: 18px;
+            font-weight: 600;
+            line-height: 1;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .portfolio-add-btn:hover {
+            border-color: var(--cyan);
+            background: rgba(45, 212, 191, 0.08);
+        }
 
         .breadcrumb .app-version {
             display: inline-block;
@@ -2067,7 +2117,18 @@
             font-size: 10px;
             font-weight: 600;
             padding: 1px 6px;
-            margin-left: 6px;
+            margin-left: 0;
+        }
+
+        html.mobile-layout .portfolio-select {
+            max-width: 132px;
+            font-size: 12px;
+            padding: 4px 8px;
+        }
+
+        html.mobile-layout .portfolio-add-btn {
+            width: 26px;
+            height: 26px;
         }
 
         html.mobile-layout .topbar-right { gap: 8px; }
@@ -2548,7 +2609,15 @@
         <!-- Main -->
         <div class="main">
             <header class="topbar">
-                <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span> <span>Портфель</span><span class="app-version" id="appVersionBadge" title="Версия приложения">v1.0.0</span><span class="mobile-only" style="margin-left:6px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span></div>
+                <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span>
+                    <div class="portfolio-switcher">
+                        <select id="portfolioSelect" class="portfolio-select" onchange="onPortfolioChange()" title="Портфель" aria-label="Портфель">
+                            <option value="default">Портфель</option>
+                        </select>
+                        <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal()" title="Создать портфель">+</button>
+                    </div>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.1.0</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
                     <button class="btn btn-outline btn-sm mobile-only" onclick="openSwapModal()" title="Ребалансировка">🔄</button>
@@ -2910,7 +2979,7 @@
                                     </div>
                                     <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">SUI UCID: <strong style="color:var(--cyan)">20947</strong></p>
                                     <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">
-                                        <a id="spreadsheetLink" href="#" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none;">Открыть Google Таблицу</a> — сделки хранятся на листе «Сделки»
+                                        <a id="spreadsheetLink" href="#" target="_blank" rel="noopener" style="color:var(--cyan);text-decoration:none;">Открыть Google Таблицу</a> — <span id="dealsSheetHint">сделки текущего портфеля на отдельном листе</span>
                                     </p>
                                     <button type="button" class="btn btn-secondary btn-sm" style="margin-top:10px;" onclick="runDiagnostics()">Проверить данные сделок</button>
                                     <button type="button" class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="forceSyncPrices()" title="Игнорирует 4-часовой лимит — использовать только для проверки">⚡ Принудительная синхронизация (тест)</button>
@@ -3229,6 +3298,28 @@
         </div>
     </div>
 
+    <!-- Portfolio Modal -->
+    <div class="modal-overlay" id="portfolioModal">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <div class="modal-title" id="portfolioModalTitle">Новый портфель</div>
+                <button class="modal-close" type="button" onclick="closePortfolioModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;">У каждого портфеля свой лист сделок в той же Google Таблице. Цены общие, позиции и уведомления — отдельные.</p>
+                <div class="form-group">
+                    <label class="form-label">Название</label>
+                    <input type="text" class="form-input" id="portfolioNameInput" placeholder="Например, Хедж или Спот" maxlength="40" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();submitPortfolioModal();}">
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" onclick="submitPortfolioModal()">Создать</button>
+                    <button type="button" class="btn btn-secondary" onclick="renameCurrentPortfolio()">Переименовать текущий</button>
+                    <button type="button" class="btn btn-outline" id="portfolioDeleteBtn" style="display:none" onclick="deleteCurrentPortfolio()">Удалить текущий</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Alert Modal (Уведомления по цене для конкретной монеты) -->
     <div class="modal-overlay" id="alertModal">
         <div class="modal">
@@ -3393,8 +3484,9 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.0.0';
+        var VAULT_APP_VERSION = '1.1.0';
         var lastAppUpdateInfo = null;
+        var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
 
         var qDateTouched = false;
         var mDateTouched = false;
@@ -3456,6 +3548,135 @@
             scrollToSection('settingsPanel');
         }
 
+        function activePortfolio() {
+            var info = currentPortfolios || {};
+            var items = info.items || [];
+            var id = info.activeId;
+            for (var i = 0; i < items.length; i++) {
+                if (items[i].id === id) return items[i];
+            }
+            return items[0] || { id: 'default', name: 'Портфель' };
+        }
+
+        function renderPortfolioSwitcher(info) {
+            if (!info || !info.items) return;
+            currentPortfolios = info;
+            var select = document.getElementById('portfolioSelect');
+            if (select) {
+                var html = info.items.map(function(p) {
+                    return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
+                }).join('');
+                select.innerHTML = html || '<option value="default">Портфель</option>';
+                select.value = info.activeId || 'default';
+            }
+            var delBtn = document.getElementById('portfolioDeleteBtn');
+            if (delBtn) delBtn.style.display = info.items.length > 1 ? '' : 'none';
+            var hint = document.getElementById('dealsSheetHint');
+            var current = activePortfolio();
+            if (hint) {
+                hint.textContent = current.sheetName
+                    ? ('сделки на листе «' + current.sheetName + '»')
+                    : 'сделки текущего портфеля на отдельном листе';
+            }
+            document.title = 'Vault — ' + (current.name || 'Крипто Портфель');
+        }
+
+        function openPortfolioModal() {
+            var input = document.getElementById('portfolioNameInput');
+            if (input) {
+                input.value = '';
+                setTimeout(function() { input.focus(); }, 50);
+            }
+            var title = document.getElementById('portfolioModalTitle');
+            if (title) title.textContent = 'Портфели';
+            var delBtn = document.getElementById('portfolioDeleteBtn');
+            if (delBtn) delBtn.style.display = (currentPortfolios.items && currentPortfolios.items.length > 1) ? '' : 'none';
+            document.getElementById('portfolioModal').classList.add('active');
+        }
+
+        function closePortfolioModal() {
+            document.getElementById('portfolioModal').classList.remove('active');
+        }
+
+        function applyPortfolioResult(result, okMessage) {
+            if (!result || (result.success === false && result.error && result.transactions === undefined)) {
+                showLoading(false);
+                showToast((result && result.error) || 'Не удалось обновить портфель', 'error');
+                renderPortfolioSwitcher(currentPortfolios);
+                return;
+            }
+            if (result.error && !result.transactions) {
+                showLoading(false);
+                showToast(result.error, 'error');
+                renderPortfolioSwitcher(currentPortfolios);
+                return;
+            }
+            closePortfolioModal();
+            handleDataResult(result, { skipEmptyToast: true });
+            if (okMessage || result.message) showToast(okMessage || result.message);
+        }
+
+        function onPortfolioChange() {
+            var select = document.getElementById('portfolioSelect');
+            var id = select && select.value;
+            if (!id || id === currentPortfolios.activeId) return;
+            showLoading(true, 'Переключаю портфель...');
+            google.script.run
+                .withSuccessHandler(function(result) { applyPortfolioResult(result); })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    renderPortfolioSwitcher(currentPortfolios);
+                    showToast('Не удалось переключить портфель: ' + ((err && err.message) || err), 'error');
+                })
+                .setActivePortfolio(id);
+        }
+
+        function submitPortfolioModal() {
+            var input = document.getElementById('portfolioNameInput');
+            var name = ((input && input.value) || '').trim();
+            if (!name) { showToast('Введите название портфеля', 'error'); return; }
+            showLoading(true, 'Создаю портфель...');
+            google.script.run
+                .withSuccessHandler(function(result) { applyPortfolioResult(result); })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Не удалось создать портфель: ' + ((err && err.message) || err), 'error');
+                })
+                .createPortfolio(name);
+        }
+
+        function renameCurrentPortfolio() {
+            var input = document.getElementById('portfolioNameInput');
+            var name = ((input && input.value) || '').trim();
+            if (!name) { showToast('Введите новое название', 'error'); return; }
+            var current = activePortfolio();
+            showLoading(true, 'Переименовываю...');
+            google.script.run
+                .withSuccessHandler(function(result) { applyPortfolioResult(result); })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Не удалось переименовать: ' + ((err && err.message) || err), 'error');
+                })
+                .renamePortfolio(current.id, name);
+        }
+
+        function deleteCurrentPortfolio() {
+            var current = activePortfolio();
+            if (!current || !currentPortfolios.items || currentPortfolios.items.length <= 1) {
+                showToast('Нельзя удалить единственный портфель', 'error');
+                return;
+            }
+            if (!confirm('Удалить портфель «' + current.name + '» и его лист сделок? Это нельзя отменить.')) return;
+            showLoading(true, 'Удаляю портфель...');
+            google.script.run
+                .withSuccessHandler(function(result) { applyPortfolioResult(result); })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    showToast('Не удалось удалить: ' + ((err && err.message) || err), 'error');
+                })
+                .deletePortfolio(current.id);
+        }
+
         function getSearchQuery() {
             var desktop = document.getElementById('searchInput');
             var mobile = document.getElementById('searchInputMobile');
@@ -3512,6 +3733,10 @@
 
         document.getElementById('locationModal').addEventListener('click', function(e) {
             if (e.target === document.getElementById('locationModal')) closeLocationModal();
+        });
+
+        document.getElementById('portfolioModal').addEventListener('click', function(e) {
+            if (e.target === document.getElementById('portfolioModal')) closePortfolioModal();
         });
 
         document.addEventListener('keydown', function(e) {
@@ -5622,6 +5847,7 @@
                 coinLocations = result.coinLocations;
                 persistCoinLocationsLocal();
             }
+            if (result.portfolios) renderPortfolioSwitcher(result.portfolios);
             renderAll();
             updatePriceCacheStatus(priceCacheInfo, result.priceUpdate);
             if (result.autoSync) {
@@ -5632,10 +5858,10 @@
             }
             updateLastSyncLabels(priceCacheInfo);
 
-            if (transactions.length === 0 && result.sheetRows > 1) {
+            if (!options.skipEmptyToast && transactions.length === 0 && result.sheetRows > 1) {
                 showToast('В таблице «' + (result.sheetName || 'Сделки') + '» есть ' + (result.sheetRows - 1) + ' строк, но сделки не распознаны. Проверьте колонки Тип и Монета', 'error');
                 runDiagnostics();
-            } else if (transactions.length === 0 && (!result.sheetRows || result.sheetRows <= 1)) {
+            } else if (!options.skipEmptyToast && transactions.length === 0 && (!result.sheetRows || result.sheetRows <= 1)) {
                 showToast('Сделок нет. Добавьте через «+ Новая сделка» или откройте Google Таблицу', 'error');
             }
 
@@ -5674,6 +5900,7 @@
                     showToast('Данные загружены (' + transactions.length + ' сделок)');
                 }
             }
+            if (options.reloadAlerts !== false) loadPriceAlerts();
             showLoading(false);
         }
 
@@ -5738,6 +5965,9 @@
                             priceCacheInfo.autoSync = info.autoSync;
                             updateLastSyncLabels(priceCacheInfo);
                         }
+                    }
+                    if (info && info.portfolios) {
+                        renderPortfolioSwitcher(info.portfolios);
                     }
                     if (info && info.appVersion) {
                         VAULT_APP_VERSION = info.appVersion;

@@ -3,7 +3,7 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
@@ -12,6 +12,11 @@ const APP_UPDATE_CACHE_KEY = 'APP_GITHUB_UPDATE_INFO';
 const APP_UPDATE_CACHE_SEC = 1200;
 const APP_UPDATE_NOTIFIED_PROP = 'APP_UPDATE_NOTIFIED_VERSION';
 const APP_AUTO_APPLY_PROP = 'APP_AUTO_APPLY_GITHUB';
+const PORTFOLIOS_PROP = 'PORTFOLIOS_REGISTRY';
+const DEFAULT_PORTFOLIO_ID = 'default';
+const DEFAULT_PORTFOLIO_NAME = 'Портфель';
+const USER_ASSETS_PROP = 'USER_ASSETS_LIST';
+const MAX_PORTFOLIOS = 20;
 
 // Кэш котировок: не чаще 1 раза в 4 часа (лимит бесплатного CMC)
 const PRICE_CACHE_TTL_SEC = 14400;
@@ -176,7 +181,7 @@ function isPortfolioAsset(value) {
  * Список тикеров пользователя для быстрого выбора в форме сделок
  */
 function getUserAssets() {
-  const saved = PropertiesService.getUserProperties().getProperty('USER_ASSETS_LIST');
+  const saved = PropertiesService.getUserProperties().getProperty(scopedUserPropKey_(USER_ASSETS_PROP));
   let list = [];
   if (saved) {
     try {
@@ -198,7 +203,7 @@ function saveUserAssets(list) {
       normalized.push(asset);
     }
   });
-  PropertiesService.getUserProperties().setProperty('USER_ASSETS_LIST', JSON.stringify(normalized));
+  PropertiesService.getUserProperties().setProperty(scopedUserPropKey_(USER_ASSETS_PROP), JSON.stringify(normalized));
   return normalized;
 }
 
@@ -217,7 +222,7 @@ function addUserAsset(coin) {
 const COIN_LOCATIONS_PROP = 'COIN_LOCATIONS';
 
 function getCoinLocations() {
-  const saved = PropertiesService.getUserProperties().getProperty(COIN_LOCATIONS_PROP);
+  const saved = PropertiesService.getUserProperties().getProperty(scopedUserPropKey_(COIN_LOCATIONS_PROP));
   if (!saved) return {};
   try {
     const parsed = JSON.parse(saved);
@@ -247,7 +252,7 @@ function saveCoinLocation(coin, location, aliases) {
     else delete map[k];
   });
 
-  PropertiesService.getUserProperties().setProperty(COIN_LOCATIONS_PROP, JSON.stringify(map));
+  PropertiesService.getUserProperties().setProperty(scopedUserPropKey_(COIN_LOCATIONS_PROP), JSON.stringify(map));
   return { success: true, locations: map };
 }
 
@@ -501,6 +506,289 @@ function getSpreadsheet() {
   throw new Error('Скрипт не привязан к Google Таблице. Откройте таблицу → Расширения → Apps Script. Либо задайте SPREADSHEET_ID в свойствах скрипта (Проект → Свойства проекта).');
 }
 
+function scopedUserPropKey_(base, portfolioId) {
+  const id = portfolioId || getActivePortfolioIdSafe_();
+  if (!id || id === DEFAULT_PORTFOLIO_ID) return base;
+  return base + '::' + id;
+}
+
+function getActivePortfolioIdSafe_() {
+  try {
+    const raw = PropertiesService.getUserProperties().getProperty(PORTFOLIOS_PROP);
+    if (!raw) return DEFAULT_PORTFOLIO_ID;
+    const data = JSON.parse(raw);
+    return (data && data.activeId) || DEFAULT_PORTFOLIO_ID;
+  } catch (e) {
+    return DEFAULT_PORTFOLIO_ID;
+  }
+}
+
+function findPortfolio_(registry, id) {
+  const items = (registry && registry.items) || [];
+  for (let i = 0; i < items.length; i++) {
+    if (String(items[i].id) === String(id)) return items[i];
+  }
+  return null;
+}
+
+function publicPortfolios_(registry) {
+  const items = (registry && registry.items) || [];
+  return {
+    activeId: (registry && registry.activeId) || DEFAULT_PORTFOLIO_ID,
+    items: items.map(function(p) {
+      return { id: p.id, name: p.name, sheetName: p.sheetName };
+    })
+  };
+}
+
+function savePortfoliosRegistry_(data) {
+  PropertiesService.getUserProperties().setProperty(PORTFOLIOS_PROP, JSON.stringify({
+    activeId: data.activeId,
+    items: data.items || []
+  }));
+}
+
+function sanitizePortfolioName_(name) {
+  return String(name || '').replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeSheetNamePart_(name) {
+  let clean = sanitizePortfolioName_(name).replace(/[:\\\/\?\*\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean) clean = DEFAULT_PORTFOLIO_NAME;
+  if (clean.length > 70) clean = clean.substring(0, 70);
+  return clean;
+}
+
+function uniqueDealsSheetName_(ss, displayName) {
+  const base = 'Сделки — ' + sanitizeSheetNamePart_(displayName);
+  if (!ss.getSheetByName(base)) return base.substring(0, 100);
+  for (let i = 2; i < 50; i++) {
+    const candidate = (base + ' (' + i + ')').substring(0, 100);
+    if (!ss.getSheetByName(candidate)) return candidate;
+  }
+  return (base.substring(0, 80) + ' ' + String(Utilities.getUuid()).substring(0, 8)).substring(0, 100);
+}
+
+function createDealsSheet_(ss, sheetName) {
+  const sheet = ss.insertSheet(String(sheetName || 'Сделки').substring(0, 100));
+  sheet.appendRow(['ID', 'Тип', 'Монета', 'Количество', 'Цена', 'Сумма', 'Комиссия', 'Дата', 'P&L', 'Средняя цена покупки', 'Примечания']);
+  sheet.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#6366f1').setFontColor('white');
+  return sheet;
+}
+
+function ensurePortfoliosRegistry_(ss, createIfMissing) {
+  const props = PropertiesService.getUserProperties();
+  let data = null;
+  try {
+    const raw = props.getProperty(PORTFOLIOS_PROP);
+    if (raw) data = JSON.parse(raw);
+  } catch (e) {}
+
+  if (!data || !Array.isArray(data.items) || !data.items.length) {
+    const existing = findDealsSheet(ss);
+    let sheetName = existing ? existing.getName() : 'Сделки';
+    if (!existing && createIfMissing) {
+      createDealsSheet_(ss, 'Сделки');
+      sheetName = 'Сделки';
+    }
+    data = {
+      activeId: DEFAULT_PORTFOLIO_ID,
+      items: [{ id: DEFAULT_PORTFOLIO_ID, name: DEFAULT_PORTFOLIO_NAME, sheetName: sheetName }]
+    };
+    savePortfoliosRegistry_(data);
+    return data;
+  }
+
+  if (!findPortfolio_(data, data.activeId)) {
+    data.activeId = data.items[0].id;
+    savePortfoliosRegistry_(data);
+  }
+  return data;
+}
+
+function withPortfolios_(payload, info) {
+  try {
+    const registry = (info && info.portfolios) || ensurePortfoliosRegistry_((info && info.ss) || getSpreadsheet(), false);
+    payload.portfolios = publicPortfolios_(registry);
+  } catch (e) {
+    payload.portfolios = {
+      activeId: DEFAULT_PORTFOLIO_ID,
+      items: [{ id: DEFAULT_PORTFOLIO_ID, name: DEFAULT_PORTFOLIO_NAME }]
+    };
+  }
+  return payload;
+}
+
+function deleteScopedPortfolioProps_(id) {
+  const props = PropertiesService.getUserProperties();
+  if (!id || id === DEFAULT_PORTFOLIO_ID) {
+    props.deleteProperty('PRICE_ALERTS_LIST');
+    props.deleteProperty(COIN_LOCATIONS_PROP);
+    props.deleteProperty(USER_ASSETS_PROP);
+    return;
+  }
+  props.deleteProperty('PRICE_ALERTS_LIST::' + id);
+  props.deleteProperty(COIN_LOCATIONS_PROP + '::' + id);
+  props.deleteProperty(USER_ASSETS_PROP + '::' + id);
+}
+
+function collectAllPortfolioCoins_(ss, registry) {
+  const coins = [];
+  const seen = {};
+  const transactions = [];
+  ((registry && registry.items) || []).forEach(function(p) {
+    const sheet = ss.getSheetByName(p.sheetName);
+    if (!sheet) return;
+    const parsed = readTransactionsFromSheet(sheet);
+    parsed.uniqueCoinsInPortfolio.forEach(function(c) {
+      if (!seen[c]) {
+        seen[c] = true;
+        coins.push(c);
+      }
+    });
+    parsed.transactions.forEach(function(tx) { transactions.push(tx); });
+  });
+  return { coins: coins, transactions: transactions };
+}
+
+/**
+ * Получает лист сделок активного портфеля
+ */
+function getDealsSheet(createIfMissing) {
+  const ss = getSpreadsheet();
+  const registry = ensurePortfoliosRegistry_(ss, !!createIfMissing);
+  const active = findPortfolio_(registry, registry.activeId) || registry.items[0];
+  let sheet = active ? ss.getSheetByName(active.sheetName) : null;
+
+  if (!sheet && active && active.id === DEFAULT_PORTFOLIO_ID) {
+    sheet = findDealsSheet(ss);
+    if (sheet && sheet.getName() !== active.sheetName) {
+      active.sheetName = sheet.getName();
+      savePortfoliosRegistry_(registry);
+    }
+  }
+
+  if (!sheet && createIfMissing) {
+    const name = (active && active.sheetName) || 'Сделки';
+    sheet = ss.getSheetByName(name) || createDealsSheet_(ss, name);
+    if (active) active.sheetName = sheet.getName();
+    savePortfoliosRegistry_(registry);
+  }
+
+  return { ss: ss, sheet: sheet, portfolio: active, portfolios: registry };
+}
+
+function getPortfolios() {
+  const ss = getSpreadsheet();
+  return publicPortfolios_(ensurePortfoliosRegistry_(ss, true));
+}
+
+function createPortfolio(name) {
+  const clean = sanitizePortfolioName_(name);
+  if (!clean) return { success: false, error: 'Введите название портфеля' };
+  if (clean.length > 40) return { success: false, error: 'Название — до 40 символов' };
+
+  const ss = getSpreadsheet();
+  const registry = ensurePortfoliosRegistry_(ss, true);
+  if (registry.items.length >= MAX_PORTFOLIOS) {
+    return { success: false, error: 'Максимум ' + MAX_PORTFOLIOS + ' портфелей' };
+  }
+
+  const lower = clean.toLowerCase();
+  for (let i = 0; i < registry.items.length; i++) {
+    if (String(registry.items[i].name).toLowerCase() === lower) {
+      return { success: false, error: 'Портфель с таким именем уже есть' };
+    }
+  }
+
+  const id = 'p_' + String(Utilities.getUuid()).replace(/-/g, '').substring(0, 10);
+  const sheetName = uniqueDealsSheetName_(ss, clean);
+  createDealsSheet_(ss, sheetName);
+  registry.items.push({ id: id, name: clean, sheetName: sheetName });
+  registry.activeId = id;
+  savePortfoliosRegistry_(registry);
+
+  const data = getTransactions();
+  data.success = true;
+  data.message = 'Создан портфель «' + clean + '»';
+  return data;
+}
+
+function setActivePortfolio(id) {
+  const ss = getSpreadsheet();
+  const registry = ensurePortfoliosRegistry_(ss, true);
+  const item = findPortfolio_(registry, id);
+  if (!item) return { success: false, error: 'Портфель не найден' };
+
+  if (!ss.getSheetByName(item.sheetName) && item.id === DEFAULT_PORTFOLIO_ID) {
+    const found = findDealsSheet(ss);
+    if (found) {
+      item.sheetName = found.getName();
+    }
+  }
+  if (!ss.getSheetByName(item.sheetName)) {
+    return { success: false, error: 'Лист портфеля не найден в таблице' };
+  }
+
+  registry.activeId = item.id;
+  savePortfoliosRegistry_(registry);
+  const data = getTransactions();
+  data.success = true;
+  return data;
+}
+
+function renamePortfolio(id, name) {
+  const clean = sanitizePortfolioName_(name);
+  if (!clean) return { success: false, error: 'Введите название портфеля' };
+  if (clean.length > 40) return { success: false, error: 'Название — до 40 символов' };
+
+  const ss = getSpreadsheet();
+  const registry = ensurePortfoliosRegistry_(ss, true);
+  const item = findPortfolio_(registry, id || registry.activeId);
+  if (!item) return { success: false, error: 'Портфель не найден' };
+
+  const lower = clean.toLowerCase();
+  for (let i = 0; i < registry.items.length; i++) {
+    if (registry.items[i].id !== item.id && String(registry.items[i].name).toLowerCase() === lower) {
+      return { success: false, error: 'Портфель с таким именем уже есть' };
+    }
+  }
+
+  item.name = clean;
+  savePortfoliosRegistry_(registry);
+  const data = getTransactions();
+  data.success = true;
+  data.message = 'Портфель переименован в «' + clean + '»';
+  return data;
+}
+
+function deletePortfolio(id) {
+  const ss = getSpreadsheet();
+  const registry = ensurePortfoliosRegistry_(ss, true);
+  if (registry.items.length <= 1) {
+    return { success: false, error: 'Нельзя удалить единственный портфель' };
+  }
+  const item = findPortfolio_(registry, id || registry.activeId);
+  if (!item) return { success: false, error: 'Портфель не найден' };
+
+  const sheet = ss.getSheetByName(item.sheetName);
+  if (sheet && ss.getSheets().length > 1) {
+    try { ss.deleteSheet(sheet); } catch (e) {}
+  }
+
+  deleteScopedPortfolioProps_(item.id);
+  registry.items = registry.items.filter(function(p) { return p.id !== item.id; });
+  if (registry.activeId === item.id) {
+    registry.activeId = registry.items[0].id;
+  }
+  savePortfoliosRegistry_(registry);
+
+  const data = getTransactions();
+  data.success = true;
+  data.message = 'Портфель «' + item.name + '» удалён';
+  return data;
+}
+
 function findDealsSheet(ss) {
   const sheets = ss.getSheets();
   const names = ['Сделки', 'Deals', 'Transactions', 'Сделки '];
@@ -533,22 +821,6 @@ function findDealsSheet(ss) {
   }
 
   return null;
-}
-
-/**
- * Получает лист «Сделки» из привязанной таблицы
- */
-function getDealsSheet(createIfMissing) {
-  const ss = getSpreadsheet();
-  let sheet = findDealsSheet(ss);
-
-  if (!sheet && createIfMissing) {
-    sheet = ss.insertSheet('Сделки');
-    sheet.appendRow(['ID', 'Тип', 'Монета', 'Количество', 'Цена', 'Сумма', 'Комиссия', 'Дата', 'P&L', 'Средняя цена покупки', 'Примечания']);
-    sheet.getRange(1, 1, 1, 11).setFontWeight('bold').setBackground('#6366f1').setFontColor('white');
-  }
-
-  return { ss: ss, sheet: sheet };
 }
 
 function normalizeTxId(raw, rowIndex) {
@@ -746,7 +1018,8 @@ function getTransactions() {
       sheetRows: sheet.getLastRow(),
       sheetName: sheet.getName(),
       spreadsheetUrl: ss.getUrl(),
-      coinLocations: getCoinLocations()
+      coinLocations: getCoinLocations(),
+      portfolios: publicPortfolios_(info.portfolios)
     };
   } catch (e) {
     return buildTransactionsError(String(e));
@@ -784,7 +1057,7 @@ function getTransactionsWithAutoSync() {
 }
 
 function buildTransactionsError(message) {
-  return {
+  return withPortfolios_({
     transactions: [],
     livePrices: {},
     coinMeta: {},
@@ -795,7 +1068,7 @@ function buildTransactionsError(message) {
     coinLocations: getCoinLocations(),
     error: message,
     priceUpdate: { success: false, errors: [message] }
-  };
+  });
 }
 
 /**
@@ -824,8 +1097,10 @@ function syncPortfolioPrices(skipThrottle) {
   }
 
   const info = getDealsSheet(true);
-  const parsed = readTransactionsFromSheet(info.sheet);
-  const collected = collectPortfolioIds(parsed.uniqueCoinsInPortfolio, parsed.transactions);
+  const allCoins = collectAllPortfolioCoins_(info.ss, info.portfolios);
+  const coins = allCoins.coins.length ? allCoins.coins : readTransactionsFromSheet(info.sheet).uniqueCoinsInPortfolio;
+  const txs = allCoins.transactions.length ? allCoins.transactions : readTransactionsFromSheet(info.sheet).transactions;
+  const collected = collectPortfolioIds(coins, txs);
   const ids = collected.ids;
   const symbols = collected.symbols;
 
@@ -2534,8 +2809,9 @@ function getScriptEditorUrl() {
 function getSetupInfo() {
   const autoSync = getAutoSyncStatus();
   try {
-    const ss = getSpreadsheet();
-    const sheet = findDealsSheet(ss);
+    const info = getDealsSheet(false);
+    const ss = info.ss;
+    const sheet = info.sheet;
     const sheetNames = ss.getSheets().map(function(s) { return s.getName(); });
 
     return {
@@ -2548,7 +2824,8 @@ function getSetupInfo() {
       bound: !!SpreadsheetApp.getActiveSpreadsheet(),
       autoSync: autoSync,
       appVersion: APP_VERSION,
-      githubRepoUrl: GITHUB_REPO_URL
+      githubRepoUrl: GITHUB_REPO_URL,
+      portfolios: publicPortfolios_(info.portfolios)
     };
   } catch (e) {
     return {
@@ -2566,8 +2843,9 @@ function getSetupInfo() {
  */
 function diagnoseTransactions() {
   try {
-    const ss = getSpreadsheet();
-    const sheet = findDealsSheet(ss);
+    const info = getDealsSheet(false);
+    const ss = info.ss;
+    const sheet = info.sheet;
     const sheetNames = ss.getSheets().map(function(s) { return s.getName(); });
 
     if (!sheet) {
@@ -2828,8 +3106,8 @@ const TELEGRAM_CHAT_ID_PROP = 'TELEGRAM_CHAT_ID';
 const TELEGRAM_BOT_USERNAME_PROP = 'TELEGRAM_BOT_USERNAME';
 const TELEGRAM_CHAT_LABEL_PROP = 'TELEGRAM_CHAT_LABEL';
 
-function getPriceAlerts() {
-  const saved = PropertiesService.getUserProperties().getProperty(PRICE_ALERTS_PROP);
+function getPriceAlerts(portfolioId) {
+  const saved = PropertiesService.getUserProperties().getProperty(scopedUserPropKey_(PRICE_ALERTS_PROP, portfolioId));
   if (!saved) return [];
   try {
     const parsed = JSON.parse(saved);
@@ -2839,8 +3117,8 @@ function getPriceAlerts() {
   }
 }
 
-function savePriceAlerts_(list) {
-  PropertiesService.getUserProperties().setProperty(PRICE_ALERTS_PROP, JSON.stringify(list));
+function savePriceAlerts_(list, portfolioId) {
+  PropertiesService.getUserProperties().setProperty(scopedUserPropKey_(PRICE_ALERTS_PROP, portfolioId), JSON.stringify(list));
 }
 
 function getAlertEmail() {
@@ -3285,6 +3563,7 @@ function buildPriceAlertEmail_(opts) {
   const coinRows = [
     ['Название', coin.name || '—'],
     ['Тикер', coin.symbol || '—'],
+    ['Портфель', opts.portfolioName || '—'],
     ['UCID (CoinMarketCap)', coin.ucid ? String(coin.ucid) : '—'],
     ['Ключ в портфеле', coin.key || '—']
   ];
@@ -3393,6 +3672,7 @@ function buildTelegramAlertText_(opts) {
     isTest ? 'Vault — тестовое уведомление' : 'Vault — сработало уведомление',
     '',
     coin.title || alert.coin || '—',
+    opts.portfolioName ? ('Портфель: ' + opts.portfolioName) : '',
     isTest
       ? ('Пример: сработает, когда цена ' + (isUp ? 'вырастет на ' : 'упадёт на ') + formatEmailPct_(Math.abs(thresholdPct)) + ' от входа.')
       : whatHappened,
@@ -3416,7 +3696,7 @@ function buildTelegramAlertText_(opts) {
     '',
     'Одноразовое уведомление. После срабатывания оно удаляется из списка. Чтобы получить снова — добавьте порог заново.'
   ];
-  if (execUrl) lines.push('Портфель: ' + execUrl);
+  if (execUrl) lines.push('Открыть: ' + execUrl);
   return lines.join('\n');
 }
 
@@ -3608,11 +3888,13 @@ function resetPriceAlert(id) {
  * потому что проверка алертов идёт по серверному триггеру, без открытого
  * браузера — клиентский расчёт в этот момент недоступен.
  */
-function computeHoldingsSnapshot_() {
-  const info = getDealsSheet(false);
-  if (!info.sheet) return {};
-
-  const parsed = readTransactionsFromSheet(info.sheet);
+function computeHoldingsSnapshot_(sheet) {
+  if (!sheet) {
+    const info = getDealsSheet(false);
+    sheet = info && info.sheet;
+  }
+  if (!sheet) return {};
+  const parsed = readTransactionsFromSheet(sheet);
   const sorted = parsed.transactions.slice().sort(function(a, b) {
     const da = new Date(a.date).getTime();
     const db = new Date(b.date).getTime();
@@ -3670,11 +3952,30 @@ function computeHoldingsSnapshot_() {
  * из списка, чтобы не слать его каждый час.
  */
 function checkPriceAlerts() {
-  const alerts = getPriceAlerts();
+  let checked = 0;
+  let triggered = 0;
+  try {
+    const ss = getSpreadsheet();
+    const registry = ensurePortfoliosRegistry_(ss, false);
+    (registry.items || []).forEach(function(portfolio) {
+      const result = checkPriceAlertsForPortfolio_(portfolio);
+      checked += result.checked || 0;
+      triggered += result.triggered || 0;
+    });
+  } catch (e) {
+    Logger.log('checkPriceAlerts failed: ' + e);
+  }
+  return { checked: checked, triggered: triggered };
+}
+
+function checkPriceAlertsForPortfolio_(portfolio) {
+  const alerts = getPriceAlerts(portfolio && portfolio.id);
   const active = alerts.filter(function(a) { return a.enabled && !a.triggered; });
   if (active.length === 0) return { checked: 0, triggered: 0 };
 
-  const holdings = computeHoldingsSnapshot_();
+  const ss = getSpreadsheet();
+  const sheet = portfolio && portfolio.sheetName ? ss.getSheetByName(portfolio.sheetName) : null;
+  const holdings = computeHoldingsSnapshot_(sheet);
   const email = getAlertEmail();
   const telegram = getTelegramSettings_();
   const execUrl = getWebAppExecUrl();
@@ -3682,6 +3983,7 @@ function checkPriceAlerts() {
   const canTelegram = !!(telegram.token && telegram.chatId);
   let triggeredCount = 0;
   const remaining = [];
+  const portfolioName = (portfolio && portfolio.name) || DEFAULT_PORTFOLIO_NAME;
 
   alerts.forEach(function(alert) {
     if (alert.triggered) return;
@@ -3709,7 +4011,8 @@ function checkPriceAlerts() {
       price: price,
       email: email,
       execUrl: execUrl,
-      triggeredAt: triggeredAt
+      triggeredAt: triggeredAt,
+      portfolioName: portfolioName
     });
     const telegramText = buildTelegramAlertText_({
       isTest: false,
@@ -3717,7 +4020,8 @@ function checkPriceAlerts() {
       holding: h,
       price: price,
       execUrl: execUrl,
-      triggeredAt: triggeredAt
+      triggeredAt: triggeredAt,
+      portfolioName: portfolioName
     });
 
     let delivered = false;
@@ -3747,7 +4051,7 @@ function checkPriceAlerts() {
     remaining.push(alert);
   });
 
-  savePriceAlerts_(remaining);
+  savePriceAlerts_(remaining, portfolio && portfolio.id);
   return { checked: active.length, triggered: triggeredCount };
 }
 
