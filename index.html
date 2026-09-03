@@ -2646,7 +2646,7 @@
                         </button>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal('create')" title="Создать портфель" aria-label="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.3</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.4</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -2757,7 +2757,7 @@
                                     <div class="invest-chart-wrap">
                                         <canvas id="lineChartCanvas"></canvas>
                                     </div>
-                                    <p class="invest-chart-hint">История — капитал в игре. «Сейчас» — оценка по рынку; зазор между линиями — прибыль или просадка в $.</p>
+                                    <p class="invest-chart-hint">Голубая линия — капитал в игре. Красная или зелёная — оценка по рынку <em>сейчас</em> (прошлых цен нет, поэтому она только справа). Зазор — прибыль или просадка в $.</p>
                                 </div>
                                 <div class="mini-stats">
                                     <div class="mini-stat">
@@ -3512,7 +3512,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.2.3';
+        var VAULT_APP_VERSION = '1.2.4';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
         var portfolioModalMode = 'create';
@@ -6727,13 +6727,13 @@
             for (var i = 0; i < sorted.length; i++) {
                 applyTransactionToHoldings(holdings, sorted[i]);
                 labels.push(new Date(sorted[i].date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }));
-                var cost = sumOpenCostBasis(holdings);
-                invested.push(cost);
-                valued.push(cost);
+                invested.push(sumOpenCostBasis(holdings));
+                valued.push(null);
             }
 
             var currentValue = getTotalValue(portfolio.holdings);
             var currentInvested = sumOpenCostBasis(portfolio.holdings);
+            if (valued.length) valued[valued.length - 1] = currentInvested;
             labels.push('Сейчас');
             invested.push(currentInvested);
             valued.push(currentValue);
@@ -6786,22 +6786,9 @@
             var valueColor = profit ? '#4ade80' : '#f87171';
             var fill = makeInvestChartFill(ctx, canvas, profit);
             var lastIdx = series.labels.length - 1;
+            var lastPoint = function(ctx) { return ctx.dataIndex >= lastIdx - 1 ? 4 : 0; };
 
             var datasets = [
-                {
-                    label: 'Оценка',
-                    data: series.valued,
-                    borderColor: valueColor,
-                    backgroundColor: fill,
-                    borderWidth: 2,
-                    fill: '+1',
-                    tension: 0.35,
-                    pointRadius: function(ctx) { return ctx.dataIndex === lastIdx ? 4 : 0; },
-                    pointHoverRadius: 5,
-                    pointBackgroundColor: valueColor,
-                    pointHoverBackgroundColor: valueColor,
-                    pointBorderWidth: 0
-                },
                 {
                     label: 'Вложено',
                     data: series.invested,
@@ -6810,10 +6797,30 @@
                     borderWidth: 2,
                     borderDash: [5, 4],
                     fill: false,
-                    tension: 0.35,
-                    pointRadius: 0,
-                    pointHoverRadius: 5,
-                    pointHoverBackgroundColor: '#38bdf8'
+                    tension: 0,
+                    spanGaps: false,
+                    order: 2,
+                    pointRadius: function(ctx) { return ctx.dataIndex === lastIdx ? 5 : 0; },
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: '#38bdf8',
+                    pointHoverBackgroundColor: '#38bdf8',
+                    pointBorderWidth: 0
+                },
+                {
+                    label: 'Оценка',
+                    data: series.valued,
+                    borderColor: valueColor,
+                    backgroundColor: fill,
+                    borderWidth: 2.5,
+                    fill: '-1',
+                    tension: 0,
+                    spanGaps: false,
+                    order: 1,
+                    pointRadius: lastPoint,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: valueColor,
+                    pointHoverBackgroundColor: valueColor,
+                    pointBorderWidth: 0
                 }
             ];
 
@@ -6842,12 +6849,12 @@
                         bodyColor: '#a1a1aa',
                         callbacks: {
                             label: function(item) {
+                                if (item.parsed.y === null || item.parsed.y === undefined) return null;
                                 return item.dataset.label + ': ' + formatMoney(item.parsed.y);
                             },
                             afterBody: function(items) {
                                 if (!items || !items.length) return '';
-                                var idx = items[0].dataIndex;
-                                if (idx !== lastIdx) return 'До «Сейчас» оценка = вложено (нет истории рыночных цен).';
+                                if (items[0].dataIndex !== lastIdx) return '';
                                 var delta = series.pnl;
                                 if (delta >= 0) return 'Прибыль: +' + formatMoney(delta);
                                 return 'Просадка: −' + formatMoney(Math.abs(delta));
@@ -6871,20 +6878,6 @@
                     }
                 }
             };
-
-            if (lineChartInstance && lineChartInstance.data.datasets.length === 2) {
-                lineChartInstance.data.labels = series.labels;
-                lineChartInstance.data.datasets[0].data = series.valued;
-                lineChartInstance.data.datasets[0].borderColor = valueColor;
-                lineChartInstance.data.datasets[0].backgroundColor = fill;
-                lineChartInstance.data.datasets[0].pointBackgroundColor = valueColor;
-                lineChartInstance.data.datasets[0].pointHoverBackgroundColor = valueColor;
-                lineChartInstance.data.datasets[0].pointRadius = function(ctx) { return ctx.dataIndex === lastIdx ? 4 : 0; };
-                lineChartInstance.data.datasets[1].data = series.invested;
-                lineChartInstance.options.plugins.tooltip = options.plugins.tooltip;
-                lineChartInstance.update();
-                return;
-            }
 
             if (lineChartInstance) {
                 lineChartInstance.destroy();
