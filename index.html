@@ -2624,7 +2624,7 @@
                         </button>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal('create')" title="Создать портфель" aria-label="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.1</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.2</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -2968,7 +2968,7 @@
                                 <div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
                                     <label class="form-label">Версия приложения</label>
                                     <p class="app-version-meta" id="appVersionMeta">Загрузка…</p>
-                                    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px;line-height:1.6;">Если на GitHub новее — в шапке появится баннер. Обновление только вручную: скопируйте файлы из репозитория и сделайте новую версию развёртывания. Сделки и ключ CMC не трогайте.</p>
+                                    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 12px;line-height:1.6;">При каждом обновлении страницы приложение спрашивает GitHub, нет ли более новой версии. Если есть — баннер в шапке. Код сам не подтягивается: скопируйте файлы из репозитория и сделайте новую версию развёртывания. Сделки и ключ CMC не трогайте.</p>
                                     <div class="app-version-row">
                                         <button type="button" class="btn btn-secondary btn-sm" onclick="checkAppUpdate(true)">Проверить обновления</button>
                                         <a class="btn btn-outline btn-sm" id="githubRepoLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">GitHub</a>
@@ -3486,7 +3486,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.2.1';
+        var VAULT_APP_VERSION = '1.2.2';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
         var portfolioModalMode = 'create';
@@ -5999,7 +5999,7 @@
                     }
                     if (info && info.appVersion) {
                         VAULT_APP_VERSION = info.appVersion;
-                        setAppVersionBadge(info.appVersion, false);
+                        setAppVersionBadge(info.appVersion, !!(lastAppUpdateInfo && lastAppUpdateInfo.hasUpdate));
                     }
                     if (info && info.githubRepoUrl) {
                         ['githubRepoLink', 'updateGithubLink'].forEach(function(id) {
@@ -6007,14 +6007,15 @@
                             if (a) a.href = info.githubRepoUrl;
                         });
                     }
-                    renderAppVersionMeta({
-                        localVersion: (info && info.appVersion) || VAULT_APP_VERSION,
-                        remoteVersion: '',
-                        hasUpdate: false,
-                        commitMessage: '',
-                        repoUrl: (info && info.githubRepoUrl) || ''
-                    });
-                    checkAppUpdate(false);
+                    if (!(lastAppUpdateInfo && lastAppUpdateInfo.remoteVersion)) {
+                        renderAppVersionMeta({
+                            localVersion: (info && info.appVersion) || VAULT_APP_VERSION,
+                            remoteVersion: '',
+                            hasUpdate: false,
+                            commitMessage: '',
+                            repoUrl: (info && info.githubRepoUrl) || ''
+                        });
+                    }
                 })
                 .getSetupInfo();
         }
@@ -6105,20 +6106,25 @@
             }
         }
 
-        function checkAppUpdate(force) {
+        function checkAppUpdate(notify) {
             google.script.run
                 .withSuccessHandler(function(info) {
                     handleAppUpdateInfo(info);
-                    if (force) {
+                    if (notify) {
                         if (info && info.hasUpdate) showToast('На GitHub есть версия ' + info.remoteVersion);
                         else if (info && info.error) showToast(info.error, 'error');
                         else showToast('У вас актуальная версия ' + ((info && info.localVersion) || VAULT_APP_VERSION));
                     }
                 })
                 .withFailureHandler(function(err) {
-                    if (force) showToast('Не удалось проверить GitHub: ' + ((err && err.message) || err), 'error');
+                    var message = (err && err.message) || err;
+                    renderAppVersionMeta({
+                        localVersion: VAULT_APP_VERSION,
+                        error: String(message)
+                    });
+                    if (notify) showToast('Не удалось проверить GitHub: ' + message, 'error');
                 })
-                .getAppUpdateInfo(!!force);
+                .getAppUpdateInfo(true);
         }
 
         var deferredPwaPrompt = null;
@@ -7412,6 +7418,7 @@
         }
 
         loadSetupInfo();
+        checkAppUpdate(false);
         loadTvSymbolOverrides();
         renderTvSymbolOverridesList();
         loadCoinLocationsLocal();

@@ -3,13 +3,13 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
 const GITHUB_REPO_URL = 'https://github.com/' + GITHUB_OWNER + '/' + GITHUB_REPO;
 const APP_UPDATE_CACHE_KEY = 'APP_GITHUB_UPDATE_INFO';
-const APP_UPDATE_CACHE_SEC = 1200;
+const APP_UPDATE_CACHE_SEC = 60;
 const APP_UPDATE_NOTIFIED_PROP = 'APP_UPDATE_NOTIFIED_VERSION';
 const PORTFOLIOS_PROP = 'PORTFOLIOS_REGISTRY';
 const DEFAULT_PORTFOLIO_ID = 'default';
@@ -4123,7 +4123,8 @@ function testApiForSui() {
  * Обновление кода — только вручную: скопировать Code.gs и index.html, затем новая версия развёртывания.
  */
 function getAppUpdateInfo(forceRefresh) {
-  return fetchGithubUpdateInfo_(!!forceRefresh);
+  // Веб-приложение всегда спрашивает GitHub заново: кэш 20 минут прятал баннер после пуша.
+  return fetchGithubUpdateInfo_(forceRefresh !== false);
 }
 
 function fetchGithubUpdateInfo_(forceRefresh) {
@@ -4150,9 +4151,9 @@ function fetchGithubUpdateInfo_(forceRefresh) {
   };
 
   try {
-    const verRes = githubFetch_(
-      'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/VERSION'
-    );
+    const verUrl = 'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/VERSION' +
+      (forceRefresh ? ('?t=' + Date.now()) : '');
+    const verRes = githubFetch_(verUrl);
     if (verRes.code === 200) {
       info.remoteVersion = String(verRes.text || '').trim().split(/\s+/)[0].replace(/^v/i, '');
     } else if (verRes.code === 404) {
@@ -4162,7 +4163,8 @@ function fetchGithubUpdateInfo_(forceRefresh) {
     }
 
     const commitRes = githubFetch_(
-      'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/commits/' + GITHUB_BRANCH
+      'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/commits/' + GITHUB_BRANCH +
+      (forceRefresh ? ('?t=' + Date.now()) : '')
     );
     if (commitRes.code === 200) {
       const commit = JSON.parse(commitRes.text);
@@ -4188,7 +4190,10 @@ function fetchGithubUpdateInfo_(forceRefresh) {
 
 function githubFetch_(url) {
   const isApi = String(url).indexOf('api.github.com') !== -1;
-  const headers = { 'User-Agent': 'vault-crypto-portfolio' };
+  const headers = {
+    'User-Agent': 'vault-crypto-portfolio',
+    'Cache-Control': 'no-cache'
+  };
   if (isApi) headers.Accept = 'application/vnd.github+json';
   const response = UrlFetchApp.fetch(url, {
     method: 'get',
