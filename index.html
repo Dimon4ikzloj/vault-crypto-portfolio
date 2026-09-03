@@ -2616,7 +2616,7 @@
                         </select>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal()" title="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.1.0</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.1.1</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -2689,8 +2689,8 @@
                         <a class="btn btn-outline" id="updateGithubLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">Открыть GitHub</a>
                         <button type="button" class="btn btn-ghost" onclick="dismissUpdateBanner()">Позже</button>
                     </div>
-                    <p id="updateAuthHint" style="display:none;font-size:12px;color:var(--text-muted);margin-top:10px;">
-                        Первый раз в редакторе Apps Script: покажите манифест, убедитесь что есть scopes <strong>script.projects</strong> и <strong>script.deployments</strong>, затем выполните <strong>authorizeGithubUpdate</strong> → Разрешить.
+                    <p id="updateAuthHint" style="display:none;font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
+                        Кнопка в браузере не видит новые разрешения, пока нет нового развёртывания. Включите API: <a href="https://script.google.com/home/usersettings" target="_blank" rel="noopener" style="color:var(--cyan);">script.google.com/home/usersettings</a>. Затем в редакторе: <strong>authorizeGithubUpdate</strong> → Разрешить, потом <strong>applyGithubUpdate</strong> → ▶ Выполнить. После этого: Развернуть → Управление развёртываниями → Новая версия.
                     </p>
                 </div>
 
@@ -3484,7 +3484,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.1.0';
+        var VAULT_APP_VERSION = '1.1.1';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
 

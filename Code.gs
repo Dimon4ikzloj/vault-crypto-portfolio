@@ -3,7 +3,7 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
@@ -4266,18 +4266,42 @@ function maybeNotifyOrApplyGithubUpdate_() {
   return info;
 }
 
+function githubUpdateAuthHelp_(apiDetail) {
+  const parts = [
+    'Кнопка в браузере крутит старое развёртывание — новые scopes она не видит.',
+    'Обновление нужно применить в РЕДАКТОРЕ Apps Script:',
+    '1) appsscript.json сохранён, в нём есть script.projects и script.deployments.',
+    '2) Откройте https://script.google.com/home/usersettings и включите «Google Apps Script API».',
+    '3) authorizeGithubUpdate → ▶ Выполнить → в окне Google нажмите Разрешить.',
+    '4) Затем в том же списке выберите applyGithubUpdate → ▶ Выполнить (не кнопку на сайте).',
+    '5) Развернуть → Управление развёртываниями → карандаш → Новая версия, обновите портфель.'
+  ];
+  if (apiDetail) parts.push('Ответ API: ' + apiDetail);
+  return parts.join(' ');
+}
+
+function scriptApiErrorDetail_(result) {
+  if (!result) return '';
+  const err = result.body && result.body.error;
+  const msg = (err && err.message) || String(result.text || '').replace(/\s+/g, ' ').substring(0, 240);
+  return 'HTTP ' + result.code + (msg ? (': ' + msg) : '');
+}
+
 /**
- * Один раз в редакторе Apps Script: authorizeGithubUpdate → ▶ Выполнить → Разрешить.
- * Нужно, чтобы кнопка «Применить обновление» могла записать файлы в этот проект.
+ * Один раз в редакторе Apps Script, ПОСЛЕ того как в appsscript.json есть
+ * oauthScopes script.projects и script.deployments:
+ * authorizeGithubUpdate → ▶ Выполнить → в окне Google нажать Разрешить.
  */
 function authorizeGithubUpdate() {
   const result = scriptApi_('get', '/projects/' + ScriptApp.getScriptId());
+  Logger.log('authorizeGithubUpdate HTTP ' + result.code + ' ' + String(result.text || '').substring(0, 500));
+  if (result.code !== 200) {
+    throw new Error(githubUpdateAuthHelp_(scriptApiErrorDetail_(result)));
+  }
   return {
-    success: result.code === 200,
-    status: result.code,
-    message: result.code === 200
-      ? 'Доступ к проекту Apps Script выдан. Теперь обновление можно применять из портфеля.'
-      : 'Не удалось получить доступ к проекту (HTTP ' + result.code + '). Добавьте в appsscript.json scopes script.projects и script.deployments, затем выполните функцию снова.'
+    success: true,
+    status: 200,
+    message: 'Доступ к проекту Apps Script выдан. Теперь в портфеле можно нажать «Применить обновление».'
   };
 }
 
@@ -4311,14 +4335,14 @@ function applyGithubUpdate() {
     return {
       success: false,
       needsAuth: true,
-      error: 'Нужно один раз выдать доступ к проекту: в Apps Script выберите authorizeGithubUpdate → ▶ Выполнить → Разрешить. В манифесте должны быть scopes script.projects и script.deployments.'
+      error: githubUpdateAuthHelp_(scriptApiErrorDetail_(project))
     };
   }
   if (project.code !== 200 || !project.body || !project.body.files) {
     return {
       success: false,
       needsAuth: project.code === 403 || project.code === 401,
-      error: 'Apps Script API не отдал файлы проекта (HTTP ' + project.code + ').'
+      error: 'Apps Script API не отдал файлы проекта. ' + scriptApiErrorDetail_(project)
     };
   }
 
