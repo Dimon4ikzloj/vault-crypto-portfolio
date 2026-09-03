@@ -973,6 +973,116 @@
             flex-shrink: 0;
         }
 
+        .position-trades-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+            height: 32px;
+            padding: 0 8px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-input);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 600;
+            line-height: 1;
+            transition: all 0.2s;
+        }
+
+        .position-trades-toggle:hover,
+        .position-row.is-expanded .position-trades-toggle {
+            border-color: var(--cyan);
+            color: var(--cyan);
+            background: rgba(45, 212, 191, 0.08);
+        }
+
+        .position-trades-caret {
+            display: inline-block;
+            font-size: 12px;
+            transition: transform 0.2s;
+        }
+
+        .position-row.is-expanded .position-trades-caret {
+            transform: rotate(180deg);
+        }
+
+        .position-trades-row td {
+            padding: 0 16px 14px;
+            background: rgba(255,255,255,0.02);
+            vertical-align: top;
+        }
+
+        .position-row.is-expanded td {
+            border-bottom-color: transparent;
+        }
+
+        tr.position-trades-row:hover td {
+            background: rgba(255,255,255,0.02);
+        }
+
+        .position-trades {
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--bg-elevated);
+            overflow: hidden;
+        }
+
+        .position-trades-head {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .position-trades-list {
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .position-trade {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 12px;
+            padding: 10px 12px;
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .position-trade:first-child { border-top: none; }
+
+        .position-trade-main {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 14px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .position-trade-date {
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .position-trade-actions {
+            display: flex;
+            gap: 6px;
+            margin-left: auto;
+        }
+
+        .position-trade-empty {
+            padding: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
         .coin-avatar {
             width: 36px; height: 36px;
             border-radius: 50%;
@@ -2301,7 +2411,42 @@
             padding: 4px 14px 10px;
         }
 
-        html.mobile-layout .responsive-table tbody tr:has(td[colspan]) {
+        html.mobile-layout .responsive-table tbody tr.position-row.is-expanded {
+            margin-bottom: 0;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        html.mobile-layout .responsive-table tbody tr.position-trades-row {
+            display: block;
+            margin-top: 0;
+            margin-bottom: 12px;
+            padding: 0 10px 10px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-top: none;
+            border-radius: 0 0 var(--radius-md) var(--radius-md);
+        }
+
+        html.mobile-layout .responsive-table tbody tr.position-trades-row td {
+            display: block;
+            padding: 0;
+            border: none;
+            text-align: left;
+        }
+
+        html.mobile-layout .coin-cell-row {
+            flex-wrap: wrap;
+        }
+
+        html.mobile-layout .position-trades-toggle {
+            width: 100%;
+            order: 5;
+            justify-content: center;
+            height: 30px;
+        }
+
+        html.mobile-layout .responsive-table tbody tr:has(td[colspan]):not(.position-trades-row) {
             background: transparent;
             border: none;
             padding: 0;
@@ -2646,7 +2791,7 @@
                         </button>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal('create')" title="Создать портфель" aria-label="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.4</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.5</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -3506,13 +3651,14 @@
         let lastUsedCoin = '';
         try { lastUsedCoin = localStorage.getItem('vaultLastCoin') || ''; } catch (e) {}
         let lastPortfolioHTML = '';
+        var expandedPositionCoins = {};
         let positionsSortMode = 'default';
         let allocationSortMode = 'default';
         try { positionsSortMode = localStorage.getItem('vaultPositionsSort') || 'default'; } catch (e) {}
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.2.4';
+        var VAULT_APP_VERSION = '1.2.5';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
         var portfolioModalMode = 'create';
@@ -3750,18 +3896,7 @@
         }
 
         function filterPositions() {
-            var q = getSearchQuery();
-            var tbody = document.getElementById('portfolioList');
-            if (!lastPortfolioHTML) return;
-            if (!q) { tbody.innerHTML = lastPortfolioHTML; return; }
-            var temp = document.createElement('tbody');
-            temp.innerHTML = lastPortfolioHTML;
-            var rows = temp.querySelectorAll('tr');
-            var filtered = '';
-            rows.forEach(function(row) {
-                if (row.textContent.toUpperCase().indexOf(q) !== -1) filtered += row.outerHTML;
-            });
-            tbody.innerHTML = filtered || '<tr><td colspan="6"><div class="empty-state"><p>Ничего не найдено</p></div></td></tr>';
+            applyPositionFilters();
         }
 
         function showLoading(show, text) {
@@ -7284,31 +7419,39 @@
             renderPortfolio(portfolio);
         }
 
-        function filterPositionsTable() {
-            var input = document.getElementById('positionsSearch');
+        function applyPositionFilters() {
             var tbody = document.getElementById('portfolioList');
-            if (!input || !tbody) return;
-
-            var q = (input.value || '').toLowerCase().trim();
-            var rows = tbody.querySelectorAll('tr[data-search]');
+            if (!tbody) return;
+            var input = document.getElementById('positionsSearch');
+            var qTable = ((input && input.value) || '').toLowerCase().trim();
+            var qHeader = getSearchQuery();
             var visibleCount = 0;
+            var positionRows = tbody.querySelectorAll('tr.position-row');
 
-            rows.forEach(function(row) {
+            positionRows.forEach(function(row) {
                 var hay = row.getAttribute('data-search') || '';
-                var match = !q || hay.indexOf(q) !== -1;
+                var text = (row.textContent || '').toUpperCase();
+                var matchTable = !qTable || hay.indexOf(qTable) !== -1;
+                var matchHeader = !qHeader || hay.toUpperCase().indexOf(qHeader) !== -1 || text.indexOf(qHeader) !== -1;
+                var match = matchTable && matchHeader;
                 row.style.display = match ? '' : 'none';
+                var detail = row.nextElementSibling;
+                if (detail && detail.classList.contains('position-trades-row')) {
+                    detail.style.display = (match && row.classList.contains('is-expanded')) ? '' : 'none';
+                }
                 if (match) visibleCount++;
             });
 
             var emptyRow = document.getElementById('positionsSearchEmpty');
-            if (rows.length > 0) {
+            var q = qTable || qHeader.toLowerCase();
+            if (positionRows.length > 0) {
                 if (visibleCount === 0 && q) {
                     if (!emptyRow) {
                         emptyRow = document.createElement('tr');
                         emptyRow.id = 'positionsSearchEmpty';
                         var td = document.createElement('td');
                         td.colSpan = 6;
-                        td.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="icon">🔍</div><p>Ничего не найдено по запросу «' + q.replace(/</g, '&lt;') + '»</p></div>';
+                        td.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="icon">🔍</div><p>Ничего не найдено</p></div>';
                         emptyRow.appendChild(td);
                         tbody.appendChild(emptyRow);
                     }
@@ -7317,6 +7460,122 @@
                     emptyRow.style.display = 'none';
                 }
             }
+        }
+
+        function filterPositionsTable() {
+            applyPositionFilters();
+        }
+
+        function isTransactionForCoin(tx, coin) {
+            if (!tx || !tx.coin || !coin) return false;
+            if (normalizeCoinKey(tx.coin) === normalizeCoinKey(coin)) return true;
+            var txUcid = getCoinUcid(tx.coin);
+            var coinUcid = getCoinUcid(coin);
+            return !!(txUcid && coinUcid && String(txUcid) === String(coinUcid));
+        }
+
+        function getTransactionsForCoin(coin) {
+            return transactions.filter(function(tx) { return isTransactionForCoin(tx, coin); })
+                .sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+        }
+
+        function pluralDeals(n) {
+            var n10 = n % 10, n100 = n % 100;
+            if (n10 === 1 && n100 !== 11) return n + ' сделка';
+            if (n10 >= 2 && n10 <= 4 && (n100 < 12 || n100 > 14)) return n + ' сделки';
+            return n + ' сделок';
+        }
+
+        function describeTransaction(tx) {
+            var badge = 'badge-sell';
+            var label = 'Продажа';
+            if (tx.type === 'Покупка') { badge = 'badge-buy'; label = 'Покупка'; }
+            else if (tx.type === 'Аирдроп') { badge = 'badge-airdrop'; label = 'Аирдроп'; }
+            else if (tx.type === 'Скам') { badge = 'badge-scam'; label = 'Скам'; }
+
+            var isSwap = isSwapNote(tx.note);
+            var isDrawdown = isDrawdownSwapNote(tx.note);
+            if (isSwap) badge = 'badge-swap';
+
+            var pnl = tx.pnl || 0;
+            var pnlClass = pnl >= 0 ? 'pnl-up' : 'pnl-down';
+            var pnlText = '—';
+            if (tx.type === 'Продажа') {
+                pnlText = isDrawdown ? 'перенесён' : formatMoney(pnl);
+                if (isDrawdown) pnlClass = '';
+            }
+
+            return {
+                badge: badge,
+                label: label,
+                pnlClass: pnlClass,
+                pnlText: pnlText,
+                priceText: tx.type === 'Аирдроп' ? 'Бесплатно' : (tx.type === 'Скам' ? '$0' : formatPrice(tx.price)),
+                totalText: tx.type === 'Аирдроп' ? '—' : formatMoney(tx.total),
+                amountText: tx.type === 'Скам' ? '—' : formatNumber(tx.amount, 5),
+                typeNoteHtml: isSwap
+                    ? '<div class="swap-note-tag">' + (isDrawdown ? '⤵ ' : '🔄 ') + escapeHtml(tx.note) + '</div>'
+                    : (tx.note ? '<div class="swap-note-tag">' + escapeHtml(tx.note) + '</div>' : ''),
+                dateText: new Date(tx.date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', year: 'numeric' })
+            };
+        }
+
+        function buildPositionTradesRow(coin, txs, isOpen) {
+            var listHtml;
+            if (!txs || !txs.length) {
+                listHtml = '<div class="position-trade-empty">Сделок по этой монете нет</div>';
+            } else {
+                listHtml = '<div class="position-trades-list">' + txs.map(function(tx) {
+                    var d = describeTransaction(tx);
+                    return '<div class="position-trade">' +
+                        '<div class="position-trade-main">' +
+                            '<span class="badge ' + d.badge + '">' + d.label + '</span>' +
+                            '<span class="mono">' + d.amountText + '</span>' +
+                            '<span class="mono">' + d.priceText + '</span>' +
+                            '<span class="mono">' + d.totalText + '</span>' +
+                            '<span class="position-trade-date">' + d.dateText + '</span>' +
+                            '<span class="' + d.pnlClass + ' mono">' + d.pnlText + '</span>' +
+                            d.typeNoteHtml +
+                        '</div>' +
+                        '<div class="position-trade-actions">' +
+                            '<button class="btn btn-outline" title="Редактировать" onclick="startEditTransaction(\'' + jsEscape(tx.id) + '\')">✎</button>' +
+                            '<button class="btn btn-danger" title="Удалить" onclick="deleteTransaction(\'' + jsEscape(tx.id) + '\')">✕</button>' +
+                        '</div>' +
+                    '</div>';
+                }).join('') + '</div>';
+            }
+            return '<tr class="position-trades-row" data-coin="' + escapeHtml(normalizeCoinKey(coin)) + '"' +
+                (isOpen ? '' : ' style="display:none"') + '>' +
+                '<td colspan="6"><div class="position-trades">' +
+                    '<div class="position-trades-head">Сделки по монете</div>' +
+                    listHtml +
+                '</div></td></tr>';
+        }
+
+        function togglePositionTrades(coin) {
+            var key = normalizeCoinKey(coin);
+            expandedPositionCoins[key] = !expandedPositionCoins[key];
+            var open = !!expandedPositionCoins[key];
+            var tbody = document.getElementById('portfolioList');
+            if (!tbody) return;
+            var main = null;
+            var detail = null;
+            var rows = tbody.querySelectorAll('tr.position-row, tr.position-trades-row');
+            for (var i = 0; i < rows.length; i++) {
+                if ((rows[i].getAttribute('data-coin') || '') !== key) continue;
+                if (rows[i].classList.contains('position-row')) main = rows[i];
+                if (rows[i].classList.contains('position-trades-row')) detail = rows[i];
+            }
+            if (main) {
+                main.classList.toggle('is-expanded', open);
+                var btn = main.querySelector('.position-trades-toggle');
+                if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            }
+            if (detail) {
+                var parentHidden = main && main.style.display === 'none';
+                detail.style.display = (open && !parentHidden) ? '' : 'none';
+            }
+            scheduleAllocationHeightSync();
         }
 
         function renderPortfolio(portfolio) {
@@ -7403,9 +7662,17 @@
                 var displayName = getCoinName(coin);
                 var searchHay = (displayName + ' ' + (sym || '') + ' ' + (ucid || '') + ' ' + coin + ' ' + locationLabel)
                     .toLowerCase().replace(/"/g, '&quot;');
+                var coinKey = normalizeCoinKey(coin);
+                var coinTxs = getTransactionsForCoin(coin);
+                var isOpen = !!expandedPositionCoins[coinKey];
+                var txCountLabel = pluralDeals(coinTxs.length);
 
-                html += '<tr data-search="' + searchHay + '">' +
+                html += '<tr class="position-row' + (isOpen ? ' is-expanded' : '') + '" data-coin="' + escapeHtml(coinKey) + '" data-search="' + searchHay + '">' +
                     '<td><div class="coin-cell-row">' +
+                        '<button type="button" class="position-trades-toggle" onclick="event.stopPropagation();togglePositionTrades(\'' + jsEscape(coin) + '\')" title="Сделки по монете" aria-expanded="' + (isOpen ? 'true' : 'false') + '">' +
+                            '<span class="position-trades-caret">▾</span>' +
+                            '<span>' + txCountLabel + '</span>' +
+                        '</button>' +
                         '<div class="coin-cell-main" onclick="selectPortfolioChartCoin(\'' + jsEscape(coin) + '\')" title="График ' + displayName + '">' +
                             '<div class="coin-avatar" style="background:linear-gradient(135deg,' + color + ',#38bdf8)">' + getCoinAvatar(coin) + '</div>' +
                             '<div><div class="coin-name">' + displayName + '</div>' +
@@ -7423,11 +7690,12 @@
                     '<td data-label="Позиция" class="mono" style="font-weight:600">' + formatMoney(posVal) + '</td>' +
                     '<td data-label="P&L">' + pnlHtml + '</td>' +
                 '</tr>';
+                html += buildPositionTradesRow(coin, coinTxs, isOpen);
             });
 
             lastPortfolioHTML = html;
             tbody.innerHTML = html;
-            filterPositionsTable();
+            applyPositionFilters();
             renderDonutChart(getAllocationChartData(holdings));
         }
 
@@ -7502,30 +7770,7 @@
             var sorted = transactions.slice().sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
             var html = '';
             sorted.forEach(function(tx) {
-                var badge, label;
-                if (tx.type === 'Покупка') { badge = 'badge-buy'; label = 'Покупка'; }
-                else if (tx.type === 'Аирдроп') { badge = 'badge-airdrop'; label = 'Аирдроп'; }
-                else if (tx.type === 'Скам') { badge = 'badge-scam'; label = 'Скам'; }
-                else { badge = 'badge-sell'; label = 'Продажа'; }
-
-                var isSwap = isSwapNote(tx.note);
-                var isDrawdown = isDrawdownSwapNote(tx.note);
-                if (isSwap) badge = 'badge-swap';
-
-                var pnl = tx.pnl || 0;
-                var pnlClass = pnl >= 0 ? 'pnl-up' : 'pnl-down';
-                var pnlText = '—';
-                if (tx.type === 'Продажа') {
-                    pnlText = isDrawdown ? 'перенесён' : formatMoney(pnl);
-                    if (isDrawdown) pnlClass = '';
-                }
-                var priceText = tx.type === 'Аирдроп' ? 'Бесплатно' : (tx.type === 'Скам' ? '$0' : formatPrice(tx.price));
-                var totalText = tx.type === 'Аирдроп' ? '—' : formatMoney(tx.total);
-                var amountText = tx.type === 'Скам' ? '—' : formatNumber(tx.amount, 5);
-                var typeNoteHtml = isSwap
-                    ? '<div class="swap-note-tag">' + (isDrawdown ? '⤵ ' : '🔄 ') + escapeHtml(tx.note) + '</div>'
-                    : (tx.note ? '<div class="swap-note-tag">' + escapeHtml(tx.note) + '</div>' : '');
-
+                var d = describeTransaction(tx);
                 var txName = getCoinName(tx.coin);
                 var txSym = getCoinSymbol(tx.coin);
                 var txUcid = getCoinUcid(tx.coin);
@@ -7535,14 +7780,14 @@
                 html += '<tr data-search="' + searchHay + '">' +
                     '<td><div class="coin-cell"><div class="coin-avatar">' + getCoinAvatar(tx.coin) + '</div><div><div class="coin-name">' + txName + '</div>' +
                     '<div class="coin-sub mono">' + getCoinPickerSub(tx.coin) + '</div></div></div></td>' +
-                    '<td data-label="Тип"><div class="type-cell"><span class="badge ' + badge + '">' + label + '</span>' + typeNoteHtml + '</div></td>' +
-                    '<td data-label="Кол-во" class="mono">' + amountText + '</td>' +
-                    '<td data-label="Цена" class="mono">' + priceText + '</td>' +
-                    '<td data-label="Сумма" class="mono">' + totalText + '</td>' +
-                    '<td data-label="Дата" style="color:var(--text-secondary)">' + new Date(tx.date).toLocaleDateString('ru-RU', { month: 'short', day: 'numeric', year: 'numeric' }) + '</td>' +
-                    '<td data-label="P&L" class="' + pnlClass + ' mono">' + pnlText + '</td>' +
-                    '<td data-label="" class="mob-actions"><button class="btn btn-outline" title="Редактировать" onclick="startEditTransaction(\'' + tx.id + '\')">✎</button> ' +
-                    '<button class="btn btn-danger" title="Удалить" onclick="deleteTransaction(\'' + tx.id + '\')">✕</button></td>' +
+                    '<td data-label="Тип"><div class="type-cell"><span class="badge ' + d.badge + '">' + d.label + '</span>' + d.typeNoteHtml + '</div></td>' +
+                    '<td data-label="Кол-во" class="mono">' + d.amountText + '</td>' +
+                    '<td data-label="Цена" class="mono">' + d.priceText + '</td>' +
+                    '<td data-label="Сумма" class="mono">' + d.totalText + '</td>' +
+                    '<td data-label="Дата" style="color:var(--text-secondary)">' + d.dateText + '</td>' +
+                    '<td data-label="P&L" class="' + d.pnlClass + ' mono">' + d.pnlText + '</td>' +
+                    '<td data-label="" class="mob-actions"><button class="btn btn-outline" title="Редактировать" onclick="startEditTransaction(\'' + jsEscape(tx.id) + '\')">✎</button> ' +
+                    '<button class="btn btn-danger" title="Удалить" onclick="deleteTransaction(\'' + jsEscape(tx.id) + '\')">✕</button></td>' +
                 '</tr>';
             });
             tbody.innerHTML = html;
