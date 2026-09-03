@@ -168,6 +168,26 @@
 
         .breadcrumb span { color: var(--text); font-weight: 500; }
 
+        .breadcrumb .app-version {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            padding: 2px 8px;
+            vertical-align: middle;
+            cursor: default;
+        }
+
+        .breadcrumb .app-version.has-update {
+            color: var(--cyan);
+            border-color: rgba(45, 212, 191, 0.45);
+            cursor: pointer;
+        }
+
         .topbar-right {
             display: flex;
             align-items: center;
@@ -760,6 +780,25 @@
             padding: 14px 24px 10px;
         }
 
+        .positions-toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: stretch;
+            flex-wrap: wrap;
+        }
+
+        .positions-toolbar .form-input {
+            flex: 1 1 180px;
+            min-width: 0;
+        }
+
+        .positions-toolbar .form-select {
+            flex: 1 1 170px;
+            max-width: 100%;
+            padding: 9px 12px;
+            font-size: 13px;
+        }
+
         .positions-search-wrap .form-input,
         .history-search-wrap .form-input {
             padding: 9px 12px;
@@ -769,6 +808,11 @@
         html.mobile-layout .positions-search-wrap,
         html.mobile-layout .history-search-wrap {
             padding: 12px 16px 8px;
+        }
+
+        html.mobile-layout .positions-toolbar .form-select {
+            min-height: 42px;
+            font-size: 13px;
         }
 
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -1077,6 +1121,15 @@
         /* ── Right column widgets ── */
         .allocation-card .card-header {
             flex-shrink: 0;
+            gap: 10px;
+        }
+
+        .allocation-sort {
+            width: auto;
+            min-width: 160px;
+            max-width: 220px;
+            padding: 7px 10px;
+            font-size: 12px;
         }
 
         .allocation-card .card-body {
@@ -1593,6 +1646,35 @@
         .bg-sync-banner ol { margin: 10px 0 10px 18px; color: var(--text-secondary); font-size: 13px; line-height: 1.7; }
         .bg-sync-banner .auth-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 
+        .update-banner {
+            display: none;
+            background: rgba(45, 212, 191, 0.08);
+            border: 1px solid rgba(45, 212, 191, 0.35);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+        }
+        .update-banner.visible { display: block; }
+        .update-banner h3 { font-size: 15px; color: var(--cyan); margin-bottom: 8px; }
+        .update-banner p { color: var(--text-secondary); font-size: 13px; margin: 0 0 8px; }
+        .update-banner .auth-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        .update-banner a.btn { text-decoration: none; }
+
+        .app-version-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin: 0 0 10px;
+        }
+
+        .app-version-meta strong { color: var(--text); }
+        .app-version-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
         .btn-link-inline {
             background: none;
             border: none;
@@ -1981,6 +2063,13 @@
 
         html.mobile-layout .breadcrumb span { font-weight: 600; }
 
+        html.mobile-layout .breadcrumb .app-version {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 1px 6px;
+            margin-left: 6px;
+        }
+
         html.mobile-layout .topbar-right { gap: 8px; }
 
         html.mobile-layout .topbar-right .btn-primary {
@@ -2304,7 +2393,12 @@
             margin: 0 auto;
         }
 
-        html.mobile-layout .col-right .card-header .tabs { display: none; }
+        html.mobile-layout .allocation-sort {
+            min-height: 40px;
+            font-size: 13px;
+            max-width: none;
+            flex: 1 1 160px;
+        }
 
         html.mobile-layout .modal-chart {
             max-width: none;
@@ -2454,7 +2548,7 @@
         <!-- Main -->
         <div class="main">
             <header class="topbar">
-                <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span> <span>Портфель</span><span class="mobile-only" style="margin-left:6px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span></div>
+                <div class="breadcrumb">Vault <span style="color:var(--text-muted)">›</span> <span>Портфель</span><span class="app-version" id="appVersionBadge" title="Версия приложения">v1.0.0</span><span class="mobile-only" style="margin-left:6px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span></div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
                     <button class="btn btn-outline btn-sm mobile-only" onclick="openSwapModal()" title="Ребалансировка">🔄</button>
@@ -2510,6 +2604,25 @@
                         <a class="btn btn-primary" id="openScriptBtnBgSync" href="#" target="_blank">Открыть Apps Script</a>
                         <button class="btn btn-ghost" type="button" onclick="installBackgroundSync()">Проверить снова</button>
                     </div>
+                </div>
+
+                <div class="update-banner" id="updateBanner">
+                    <h3>Доступно обновление Vault</h3>
+                    <p>
+                        У вас <strong id="updateLocalVer">—</strong>, на GitHub — <strong id="updateRemoteVer">—</strong>.
+                    </p>
+                    <p id="updateCommitMsg" style="display:none;"></p>
+                    <p style="font-size:12px;color:var(--text-muted);margin:0;">
+                        Таблица, сделки и API-ключ не затрагиваются. Код в Apps Script заменится файлами с GitHub.
+                    </p>
+                    <div class="auth-actions">
+                        <button type="button" class="btn btn-primary" onclick="applyGithubUpdateUi()">Применить обновление</button>
+                        <a class="btn btn-outline" id="updateGithubLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">Открыть GitHub</a>
+                        <button type="button" class="btn btn-ghost" onclick="dismissUpdateBanner()">Позже</button>
+                    </div>
+                    <p id="updateAuthHint" style="display:none;font-size:12px;color:var(--text-muted);margin-top:10px;">
+                        Первый раз в редакторе Apps Script: покажите манифест, убедитесь что есть scopes <strong>script.projects</strong> и <strong>script.deployments</strong>, затем выполните <strong>authorizeGithubUpdate</strong> → Разрешить.
+                    </p>
                 </div>
 
                 <div class="dashboard-grid">
@@ -2576,7 +2689,19 @@
                             </div>
                             <div class="collapsible-body">
                                 <div class="positions-search-wrap">
-                                    <input type="text" id="positionsSearch" class="form-input" placeholder="Поиск монеты по названию, тикеру или UCID..." oninput="filterPositionsTable()">
+                                    <div class="positions-toolbar">
+                                        <input type="text" id="positionsSearch" class="form-input" placeholder="Поиск монеты по названию, тикеру или UCID..." oninput="filterPositionsTable()">
+                                        <select id="positionsSort" class="form-select" onchange="onPositionsSortChange()" title="Сортировка позиций" aria-label="Сортировка позиций">
+                                            <option value="default">По умолчанию</option>
+                                            <option value="pct_desc">% : лучшие сверху</option>
+                                            <option value="pct_asc">% : худшие сверху</option>
+                                            <option value="usd_desc">$ : прибыль сверху</option>
+                                            <option value="usd_asc">$ : убыток сверху</option>
+                                            <option value="cmc">CMC : ранг рынка</option>
+                                            <option value="value">По стоимости позиции</option>
+                                            <option value="invested">По сумме вложений</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <div class="table-wrap">
                                 <table class="responsive-table positions-table">
@@ -2655,10 +2780,16 @@
                         <div class="card allocation-card">
                             <div class="card-header">
                                 <div class="card-title">Аллокация</div>
-                                <div class="tabs">
-                                    <button class="tab active">Тип</button>
-                                    <button class="tab">Позиции</button>
-                                </div>
+                                <select id="allocationSort" class="form-select allocation-sort" onchange="onAllocationSortChange()" title="Сортировка аллокации" aria-label="Сортировка аллокации">
+                                    <option value="default">По доле ↓</option>
+                                    <option value="pct_desc">% : лучшие сверху</option>
+                                    <option value="pct_asc">% : худшие сверху</option>
+                                    <option value="usd_desc">$ : прибыль сверху</option>
+                                    <option value="usd_asc">$ : убыток сверху</option>
+                                    <option value="cmc">CMC : ранг рынка</option>
+                                    <option value="value">По стоимости позиции</option>
+                                    <option value="invested">По сумме вложений</option>
+                                </select>
                             </div>
                             <div class="card-body">
                                 <div class="donut-wrap" id="chartWrapper" style="display:none;">
@@ -2757,6 +2888,19 @@
                                     <p class="pwa-install-hint" id="pwaAndroidHint" style="display:none;margin-top:8px;">
                                         <strong>Android:</strong> меню браузера (⋮) → <strong>Установить приложение</strong> или кнопка выше
                                     </p>
+                                </div>
+                                <div class="form-group" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);">
+                                    <label class="form-label">Версия приложения</label>
+                                    <p class="app-version-meta" id="appVersionMeta">Загрузка…</p>
+                                    <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--text-secondary);margin:0 0 12px;cursor:pointer;">
+                                        <input type="checkbox" id="autoApplyGithub" style="margin-top:2px;" onchange="saveAutoApplyGithubUi()">
+                                        <span>Самим применять обновления с GitHub (часовой триггер). Нужно один раз выдать authorizeGithubUpdate.</span>
+                                    </label>
+                                    <div class="app-version-row">
+                                        <button type="button" class="btn btn-secondary btn-sm" onclick="checkAppUpdate(true)">Проверить обновления</button>
+                                        <button type="button" class="btn btn-primary btn-sm" id="applyUpdateBtn" style="display:none" onclick="applyGithubUpdateUi()">Применить обновление</button>
+                                        <a class="btn btn-outline btn-sm" id="githubRepoLink" href="https://github.com/Dimon4ikzloj/vault-crypto-portfolio" target="_blank" rel="noopener">GitHub</a>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">Символ или UCID</label>
@@ -3243,8 +3387,14 @@
         let lastUsedCoin = '';
         try { lastUsedCoin = localStorage.getItem('vaultLastCoin') || ''; } catch (e) {}
         let lastPortfolioHTML = '';
+        let positionsSortMode = 'default';
+        let allocationSortMode = 'default';
+        try { positionsSortMode = localStorage.getItem('vaultPositionsSort') || 'default'; } catch (e) {}
+        try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
+        var VAULT_APP_VERSION = '1.0.0';
+        var lastAppUpdateInfo = null;
 
         var qDateTouched = false;
         var mDateTouched = false;
@@ -3427,6 +3577,13 @@
             var meta = getCoinMeta(coin);
             if (meta && meta.symbol) return meta.symbol;
             return isNumericId(coin) ? '' : normalizeCoinKey(coin);
+        }
+
+        function getCmcRank(coin) {
+            var meta = getCoinMeta(coin);
+            if (!meta || meta.cmcRank == null || meta.cmcRank === '') return null;
+            var n = parseInt(meta.cmcRank, 10);
+            return (!isNaN(n) && n > 0) ? n : null;
         }
 
         function getCoinAvatar(coin) {
@@ -5582,8 +5739,178 @@
                             updateLastSyncLabels(priceCacheInfo);
                         }
                     }
+                    if (info && info.appVersion) {
+                        VAULT_APP_VERSION = info.appVersion;
+                        setAppVersionBadge(info.appVersion, false);
+                    }
+                    if (info && info.githubRepoUrl) {
+                        ['githubRepoLink', 'updateGithubLink'].forEach(function(id) {
+                            var a = document.getElementById(id);
+                            if (a) a.href = info.githubRepoUrl;
+                        });
+                    }
+                    renderAppVersionMeta({
+                        localVersion: (info && info.appVersion) || VAULT_APP_VERSION,
+                        remoteVersion: '',
+                        hasUpdate: false,
+                        commitMessage: '',
+                        repoUrl: (info && info.githubRepoUrl) || ''
+                    });
+                    checkAppUpdate(false);
                 })
                 .getSetupInfo();
+        }
+
+        function setAppVersionBadge(version, hasUpdate) {
+            var badge = document.getElementById('appVersionBadge');
+            if (!badge) return;
+            badge.textContent = 'v' + String(version || VAULT_APP_VERSION).replace(/^v/i, '');
+            badge.classList.toggle('has-update', !!hasUpdate);
+            badge.title = hasUpdate ? 'Доступно обновление — откройте настройки' : 'Версия приложения';
+            badge.onclick = hasUpdate ? function() { openSettings(); } : null;
+        }
+
+        function dismissedUpdateKey(version) {
+            return 'vaultDismissedUpdate:' + String(version || '');
+        }
+
+        function isUpdateDismissed(version) {
+            if (!version) return false;
+            try { return localStorage.getItem(dismissedUpdateKey(version)) === '1'; } catch (e) { return false; }
+        }
+
+        function dismissUpdateBanner() {
+            var info = lastAppUpdateInfo;
+            if (info && info.remoteVersion) {
+                try { localStorage.setItem(dismissedUpdateKey(info.remoteVersion), '1'); } catch (e) {}
+            }
+            var banner = document.getElementById('updateBanner');
+            if (banner) banner.classList.remove('visible');
+        }
+
+        function formatCommitDate(iso) {
+            if (!iso) return '';
+            var d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            return d.toLocaleString('ru-RU');
+        }
+
+        function renderAppVersionMeta(info) {
+            var meta = document.getElementById('appVersionMeta');
+            if (!meta || !info) return;
+            var lines = ['У вас: <strong>v' + String(info.localVersion || VAULT_APP_VERSION).replace(/^v/i, '') + '</strong>'];
+            if (info.remoteVersion) {
+                lines.push('GitHub: <strong>v' + String(info.remoteVersion).replace(/^v/i, '') + '</strong>' +
+                    (info.hasUpdate ? ' — есть обновление' : ' — актуальная'));
+            } else if (info.error) {
+                lines.push('Проверка GitHub: ' + info.error);
+            } else {
+                lines.push('Проверяю GitHub…');
+            }
+            if (info.commitMessage) {
+                lines.push('Последний коммит: ' + info.commitMessage +
+                    (info.commitDate ? ' (' + formatCommitDate(info.commitDate) + ')' : ''));
+            }
+            meta.innerHTML = lines.join('<br>');
+        }
+
+        function handleAppUpdateInfo(info) {
+            if (!info) return;
+            lastAppUpdateInfo = info;
+            var localVer = info.localVersion || VAULT_APP_VERSION;
+            setAppVersionBadge(localVer, !!info.hasUpdate);
+            renderAppVersionMeta(info);
+
+            var applyBtn = document.getElementById('applyUpdateBtn');
+            if (applyBtn) applyBtn.style.display = info.hasUpdate ? '' : 'none';
+
+            var autoBox = document.getElementById('autoApplyGithub');
+            if (autoBox) autoBox.checked = !!info.autoApply;
+
+            ['githubRepoLink', 'updateGithubLink'].forEach(function(id) {
+                var a = document.getElementById(id);
+                if (a && info.repoUrl) a.href = info.repoUrl;
+            });
+
+            var banner = document.getElementById('updateBanner');
+            if (banner) {
+                var show = !!info.hasUpdate && !isUpdateDismissed(info.remoteVersion);
+                banner.classList.toggle('visible', show);
+                var localEl = document.getElementById('updateLocalVer');
+                var remoteEl = document.getElementById('updateRemoteVer');
+                if (localEl) localEl.textContent = 'v' + String(localVer).replace(/^v/i, '');
+                if (remoteEl) remoteEl.textContent = 'v' + String(info.remoteVersion || '').replace(/^v/i, '');
+                var commitEl = document.getElementById('updateCommitMsg');
+                if (commitEl) {
+                    if (info.commitMessage) {
+                        commitEl.style.display = '';
+                        commitEl.textContent = info.commitMessage +
+                            (info.commitDate ? ' · ' + formatCommitDate(info.commitDate) : '');
+                    } else {
+                        commitEl.style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        function checkAppUpdate(force) {
+            google.script.run
+                .withSuccessHandler(function(info) {
+                    handleAppUpdateInfo(info);
+                    if (force) {
+                        if (info && info.hasUpdate) showToast('На GitHub есть версия ' + info.remoteVersion);
+                        else if (info && info.error) showToast(info.error, 'error');
+                        else showToast('У вас актуальная версия ' + ((info && info.localVersion) || VAULT_APP_VERSION));
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    if (force) showToast('Не удалось проверить GitHub: ' + ((err && err.message) || err), 'error');
+                })
+                .getAppUpdateInfo(!!force);
+        }
+
+        function saveAutoApplyGithubUi() {
+            var box = document.getElementById('autoApplyGithub');
+            var enabled = !!(box && box.checked);
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    if (res && res.success) showToast(res.message || 'Сохранено');
+                    else showToast((res && res.error) || 'Не удалось сохранить', 'error');
+                })
+                .withFailureHandler(function(err) {
+                    showToast('Не удалось сохранить: ' + ((err && err.message) || err), 'error');
+                    if (box) box.checked = !enabled;
+                })
+                .setAutoApplyGithubUpdate(enabled);
+        }
+
+        function applyGithubUpdateUi() {
+            if (!confirm('Код в Apps Script будет заменён файлами с GitHub.\nСделки, таблица и API-ключ CoinMarketCap сохранятся.\nПродолжить?')) return;
+            showLoading(true, 'Качаю обновление с GitHub...');
+            google.script.run
+                .withSuccessHandler(function(res) {
+                    showLoading(false);
+                    var hint = document.getElementById('updateAuthHint');
+                    if (res && res.needsAuth && hint) hint.style.display = '';
+                    if (res && res.success) {
+                        showToast(res.message || 'Обновление применено');
+                        if (!res.needsRedeploy) {
+                            setTimeout(function() { location.reload(); }, 1200);
+                        }
+                    } else if (res && res.upToDate) {
+                        showToast(res.message || 'Уже актуальная версия');
+                        checkAppUpdate(true);
+                    } else {
+                        showToast((res && res.error) || 'Не удалось применить обновление', 'error');
+                    }
+                })
+                .withFailureHandler(function(err) {
+                    showLoading(false);
+                    var hint = document.getElementById('updateAuthHint');
+                    if (hint) hint.style.display = '';
+                    showToast('Не удалось применить обновление: ' + ((err && err.message) || err), 'error');
+                })
+                .applyGithubUpdate();
         }
 
         var deferredPwaPrompt = null;
@@ -6205,6 +6532,53 @@
             }
         }
 
+        function onAllocationSortChange() {
+            var select = document.getElementById('allocationSort');
+            allocationSortMode = (select && select.value) ? select.value : 'default';
+            try { localStorage.setItem('vaultAllocationSort', allocationSortMode); } catch (e) {}
+            var portfolio = calculatePortfolio();
+            renderPortfolio(portfolio);
+        }
+
+        function getAllocationChartData(holdings) {
+            var coins = Object.keys(holdings).filter(function(c) {
+                return holdings[c].amount > 0 && holdings[c].costBasis > 0.000001;
+            });
+            var mode = allocationSortMode && allocationSortMode !== 'default' ? allocationSortMode : 'invested';
+            coins = sortActivePositionCoins(coins, holdings, mode);
+            var labels = [], values = [], chartCoins = [];
+            coins.forEach(function(coin) {
+                labels.push(getCoinSymbol(coin) || getCoinName(coin));
+                values.push(holdings[coin].costBasis);
+                chartCoins.push(coin);
+            });
+            return { labels: labels, values: values, coins: chartCoins };
+        }
+
+        function getDonutTooltipOptions() {
+            return {
+                backgroundColor: '#1a1a1a',
+                borderColor: 'rgba(255,255,255,0.12)',
+                borderWidth: 1,
+                titleColor: '#fff',
+                bodyColor: '#a1a1aa',
+                padding: 10,
+                displayColors: true,
+                callbacks: {
+                    title: function(items) {
+                        return items && items[0] ? items[0].label : '';
+                    },
+                    label: function(ctx) {
+                        var value = ctx.parsed;
+                        var data = (ctx.dataset && ctx.dataset.data) || [];
+                        var total = data.reduce(function(a, b) { return a + b; }, 0);
+                        var pct = total > 0 ? (value / total * 100).toFixed(2) : '0.00';
+                        return formatMoney(value) + ' · ' + pct + '% аллокации';
+                    }
+                }
+            };
+        }
+
         function renderDonutChart(chartData) {
             var wrapper = document.getElementById('chartWrapper');
             var empty = document.getElementById('allocationEmpty');
@@ -6238,6 +6612,7 @@
                 myChartInstance.data.labels = chartData.labels;
                 myChartInstance.data.datasets[0].data = chartData.values;
                 myChartInstance.data.datasets[0].backgroundColor = colors;
+                myChartInstance.options.plugins.tooltip = getDonutTooltipOptions();
                 myChartInstance.update();
             } else {
                 myChartInstance = new Chart(ctx, {
@@ -6255,7 +6630,10 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         cutout: '72%',
-                        plugins: { legend: { display: false } }
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: getDonutTooltipOptions()
+                        }
                     }
                 });
             }
@@ -6485,6 +6863,69 @@
             }
         }
 
+        function nullsLastCompare(a, b) {
+            if (a == null && b == null) return 0;
+            if (a == null) return 1;
+            if (b == null) return -1;
+            return a - b;
+        }
+
+        function getPositionSortMetrics(coin, h) {
+            var currentPrice = getCurrentPrice(coin);
+            var price = currentPrice !== null ? currentPrice : h.avgBuy;
+            var posVal = h.amount * price;
+            var invested = h.costBasis;
+            var pnlUsd = 0;
+            var pnlPct = null;
+            if (h.isScam) {
+                pnlUsd = -invested;
+                pnlPct = -100;
+            } else if (h.isRecovered) {
+                pnlUsd = posVal;
+            } else if (currentPrice !== null && h.avgBuy > 0) {
+                pnlUsd = posVal - invested;
+                pnlPct = ((currentPrice - h.avgBuy) / h.avgBuy) * 100;
+            }
+            return {
+                posVal: posVal,
+                invested: invested,
+                pnlUsd: pnlUsd,
+                pnlPct: pnlPct,
+                cmcRank: getCmcRank(coin)
+            };
+        }
+
+        function sortActivePositionCoins(coins, holdings, mode) {
+            var metrics = {};
+            coins.forEach(function(c) {
+                metrics[c] = getPositionSortMetrics(c, holdings[c]);
+            });
+            var copy = coins.slice();
+            copy.sort(function(a, b) {
+                var ma = metrics[a];
+                var mb = metrics[b];
+                var cmp = 0;
+                if (mode === 'pct_desc') cmp = nullsLastCompare(mb.pnlPct, ma.pnlPct);
+                else if (mode === 'pct_asc') cmp = nullsLastCompare(ma.pnlPct, mb.pnlPct);
+                else if (mode === 'usd_desc') cmp = mb.pnlUsd - ma.pnlUsd;
+                else if (mode === 'usd_asc') cmp = ma.pnlUsd - mb.pnlUsd;
+                else if (mode === 'cmc') cmp = nullsLastCompare(ma.cmcRank, mb.cmcRank);
+                else if (mode === 'value') cmp = mb.posVal - ma.posVal;
+                else if (mode === 'invested') cmp = mb.invested - ma.invested;
+                if (cmp) return cmp;
+                return getCoinName(a).localeCompare(getCoinName(b), 'ru');
+            });
+            return copy;
+        }
+
+        function onPositionsSortChange() {
+            var select = document.getElementById('positionsSort');
+            positionsSortMode = (select && select.value) ? select.value : 'default';
+            try { localStorage.setItem('vaultPositionsSort', positionsSortMode); } catch (e) {}
+            var portfolio = calculatePortfolio();
+            renderPortfolio(portfolio);
+        }
+
         function filterPositionsTable() {
             var input = document.getElementById('positionsSearch');
             var tbody = document.getElementById('portfolioList');
@@ -6524,6 +6965,9 @@
             var holdings = portfolio.holdings;
             var tbody = document.getElementById('portfolioList');
             var activeCoins = Object.keys(holdings).filter(function(c) { return holdings[c].amount > 0; });
+            if (positionsSortMode && positionsSortMode !== 'default') {
+                activeCoins = sortActivePositionCoins(activeCoins, holdings, positionsSortMode);
+            }
 
             if (activeCoins.length === 0) {
                 lastPortfolioHTML = '';
@@ -6532,7 +6976,7 @@
                 return;
             }
 
-            var chartLabels = [], chartValues = [], chartCoins = [], html = '';
+            var html = '';
             var colors = generateColors(activeCoins.length);
 
             activeCoins.forEach(function(coin, idx) {
@@ -6545,12 +6989,6 @@
                     ? ((currentPrice - h.avgBuy) / h.avgBuy * 100) : null;
                 var sparkSign = pnlPct === null ? '' : (pnlPct >= 0 ? '↑' : '↓');
                 var color = colors[idx];
-
-                if (invested > 0.000001) {
-                    chartLabels.push(getCoinSymbol(coin) || getCoinName(coin));
-                    chartValues.push(invested);
-                    chartCoins.push(coin);
-                }
 
                 var avgBuyHtml = h.isScam
                     ? '<span style="color:var(--red);font-weight:600">скам</span>'
@@ -6594,6 +7032,8 @@
                 var ucid = getCoinUcid(coin);
                 var subParts = [];
                 if (sym) subParts.push(sym);
+                var cmcRank = getCmcRank(coin);
+                if (cmcRank) subParts.push('CMC #' + cmcRank);
                 if (ucid) subParts.push('UCID ' + ucid);
                 else if (!isCoinNameResolved(coin) && isNumericId(coin)) subParts.push('UCID ' + normalizeCoinKey(coin));
                 if (h.isScam) subParts.push('скам · ' + formatMoney(invested) + ' вложено');
@@ -6630,7 +7070,7 @@
             lastPortfolioHTML = html;
             tbody.innerHTML = html;
             filterPositionsTable();
-            renderDonutChart({ labels: chartLabels, values: chartValues, coins: chartCoins });
+            renderDonutChart(getAllocationChartData(holdings));
         }
 
         function renderRisk(portfolio) {
@@ -6767,6 +7207,20 @@
         loadTvSymbolOverrides();
         renderTvSymbolOverridesList();
         loadCoinLocationsLocal();
+        (function initPositionsSort() {
+            var select = document.getElementById('positionsSort');
+            if (!select) return;
+            var allowed = { default: 1, pct_desc: 1, pct_asc: 1, usd_desc: 1, usd_asc: 1, cmc: 1, value: 1, invested: 1 };
+            if (!allowed[positionsSortMode]) positionsSortMode = 'default';
+            select.value = positionsSortMode;
+        })();
+        (function initAllocationSort() {
+            var select = document.getElementById('allocationSort');
+            if (!select) return;
+            var allowed = { default: 1, pct_desc: 1, pct_asc: 1, usd_desc: 1, usd_asc: 1, cmc: 1, value: 1, invested: 1 };
+            if (!allowed[allocationSortMode]) allocationSortMode = 'default';
+            select.value = allocationSortMode;
+        })();
         loadPriceAlerts();
         initPwaInstall();
         refreshData();

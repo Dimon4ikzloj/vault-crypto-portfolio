@@ -1,6 +1,18 @@
 // Вставь свой API-ключ CoinMarketCap (https://coinmarketcap.com/api/)
 const API_KEY = "YOUR_API_KEY";
 
+// Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
+// При релизе поднимай все три, иначе проверка обновлений не сработает.
+const APP_VERSION = '1.0.0';
+const GITHUB_OWNER = 'Dimon4ikzloj';
+const GITHUB_REPO = 'vault-crypto-portfolio';
+const GITHUB_BRANCH = 'main';
+const GITHUB_REPO_URL = 'https://github.com/' + GITHUB_OWNER + '/' + GITHUB_REPO;
+const APP_UPDATE_CACHE_KEY = 'APP_GITHUB_UPDATE_INFO';
+const APP_UPDATE_CACHE_SEC = 1200;
+const APP_UPDATE_NOTIFIED_PROP = 'APP_UPDATE_NOTIFIED_VERSION';
+const APP_AUTO_APPLY_PROP = 'APP_AUTO_APPLY_GITHUB';
+
 // Кэш котировок: не чаще 1 раза в 4 часа (лимит бесплатного CMC)
 const PRICE_CACHE_TTL_SEC = 14400;
 const PRICE_FETCH_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -717,6 +729,7 @@ function getTransactions() {
 
     missingPrices = applyManualPrices(livePrices, missingPrices);
     const userAssets = syncUserAssetsFromTransactions(parsed.transactions);
+    maybeBackfillCmcRanks_(parsed.uniqueCoinsInPortfolio);
     const coinMeta = buildCoinMetaMap(parsed.uniqueCoinsInPortfolio);
 
     return {
@@ -845,6 +858,19 @@ function syncPortfolioPrices(skipThrottle) {
     if (result.apiCalled) apiCalled = true;
     updatedCount += result.updated;
     if (result.error) errors.push(result.error);
+  }
+
+  if (apiCalled) {
+    const rankIds = ids.slice();
+    symbols.forEach(function(sym) {
+      const resolvedId = resolvePortfolioCoinId(sym);
+      if (resolvedId && rankIds.indexOf(resolvedId) === -1) rankIds.push(resolvedId);
+    });
+    try {
+      updateCmcRanksFromMap_(rankIds);
+    } catch (rankErr) {
+      errors.push('CMC rank: ' + String(rankErr));
+    }
   }
 
   if (apiCalled) {
@@ -1778,6 +1804,31 @@ function savePriceStore(store) {
   PropertiesService.getScriptProperties().setProperty('COIN_PRICE_STORE', JSON.stringify(store || {}));
 }
 
+function parseCmcRank_(value) {
+  const n = parseInt(value, 10);
+  return (!isNaN(n) && n > 0) ? n : null;
+}
+
+/**
+ * Официальный ранг CMC («Ranked 2nd out of all …» на странице монеты).
+ * В quotes поле называется cmc_rank, в /map — rank.
+ */
+function extractCmcRank_(coinData) {
+  if (!coinData || typeof coinData !== 'object' || coinData.ambiguous) return null;
+  return parseCmcRank_(
+    coinData.cmc_rank != null ? coinData.cmc_rank :
+      (coinData.rank != null ? coinData.rank :
+        (coinData.cmcRank != null ? coinData.cmcRank : null))
+  );
+}
+
+function cmcQuoteLatestUrl_(version, param, values) {
+  const v = version === 2 ? 'v2' : 'v1';
+  return 'https://pro-api.coinmarketcap.com/' + v + '/cryptocurrency/quotes/latest?' +
+    param + '=' + encodeURIComponent(values) +
+    '&aux=' + encodeURIComponent('cmc_rank,num_market_pairs,circulating_supply,total_supply,max_supply,is_active');
+}
+
 function persistCoinData(coinData) {
   saveCoinToRegistry(coinData);
 
@@ -1785,15 +1836,128 @@ function persistCoinData(coinData) {
   const id = String(coinData.id);
   const symbol = coinData.symbol ? String(coinData.symbol).toUpperCase() : '';
   const registryEntry = lookupRegistry(id);
+  const stored = readStoredCoinData(id);
+  const cmcRank = extractCmcRank_(coinData);
   const entry = {
     id: coinData.id,
     symbol: symbol,
     name: (registryEntry && registryEntry.name) || coinData.name || symbol,
     price: coinData.quote.USD.price,
+    cmcRank: cmcRank !== null ? cmcRank : (stored && stored.cmcRank ? stored.cmcRank : null),
     updatedAt: Date.now()
   };
   store['ID_' + id] = entry;
   savePriceStore(store);
+}
+
+function applyCmcRanksToStore_(rankById) {
+  if (!rankById) return 0;
+  const store = getPriceStore();
+  const cache = CacheService.getScriptCache();
+  let changed = 0;
+
+  Object.keys(rankById).forEach(function(id) {
+    const rank = parseCmcRank_(rankById[id]);
+    if (!rank) return;
+    const key = 'ID_' + String(id);
+    const entry = store[key] || { id: parseInt(id, 10) || id };
+    if (entry.cmcRank === rank) return;
+    entry.id = entry.id || parseInt(id, 10) || id;
+    entry.cmcRank = rank;
+    store[key] = entry;
+    changed++;
+
+    const metaKey = 'CRYPTO_META_' + id;
+    const raw = cache.get(metaKey);
+    if (raw) {
+      try {
+        const meta = JSON.parse(raw);
+        meta.cmcRank = rank;
+        cache.put(metaKey, JSON.stringify(meta), PRICE_CACHE_TTL_SEC);
+      } catch (e) {}
+    }
+  });
+
+  if (changed) savePriceStore(store);
+  return changed;
+}
+
+/**
+ * Ранг рынка с /v1/cryptocurrency/map — то же число, что «Ranked Nth» на CMC.
+ */
+function updateCmcRanksFromMap_(ids) {
+  const unique = [];
+  const seen = {};
+  (ids || []).forEach(function(id) {
+    const key = String(id || '').trim();
+    if (!key || seen[key]) return;
+    seen[key] = true;
+    unique.push(key);
+  });
+  if (!unique.length) return 0;
+
+  let updated = 0;
+  const options = {
+    method: 'GET',
+    headers: { 'X-CMC_PRO_API_KEY': API_KEY, 'Accept': 'application/json' },
+    muteHttpExceptions: true
+  };
+
+  for (let i = 0; i < unique.length; i += 100) {
+    const chunk = unique.slice(i, i + 100);
+    const url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?id=' +
+      encodeURIComponent(chunk.join(',')) +
+      '&listing_status=active,inactive,untracked';
+    const response = UrlFetchApp.fetch(url, options);
+    if (response.getResponseCode() !== 200) continue;
+
+    const payload = JSON.parse(response.getContentText());
+    if (payload.status && payload.status.error_code !== 0) continue;
+
+    const raw = payload.data;
+    const items = Array.isArray(raw) ? raw : (raw ? Object.keys(raw).map(function(k) { return raw[k]; }) : []);
+    const rankById = {};
+    items.forEach(function(item) {
+      if (!item || item.id == null) return;
+      const rank = extractCmcRank_(item);
+      if (rank) rankById[String(item.id)] = rank;
+    });
+    updated += applyCmcRanksToStore_(rankById);
+  }
+
+  return updated;
+}
+
+function maybeBackfillCmcRanks_(coins) {
+  if (!API_KEY || API_KEY === 'YOUR_API_KEY') return;
+  const ids = [];
+  const seen = {};
+  (coins || []).forEach(function(coin) {
+    const key = normalizeCoinKey(coin);
+    const id = resolvePortfolioCoinId(key) || (isNumericId(key) ? key : null);
+    if (!id || seen[id]) return;
+    seen[id] = true;
+    ids.push(id);
+  });
+  if (!ids.length) return;
+
+  let missing = 0;
+  ids.forEach(function(id) {
+    const stored = readStoredCoinData(id);
+    if (!stored || !parseCmcRank_(stored.cmcRank)) missing++;
+  });
+  if (missing === 0) return;
+
+  const props = PropertiesService.getScriptProperties();
+  const last = parseInt(props.getProperty('CMC_RANK_BACKFILL_MS') || '0', 10);
+  if (last && Date.now() - last < 30 * 60 * 1000) return;
+  props.setProperty('CMC_RANK_BACKFILL_MS', String(Date.now()));
+
+  try {
+    updateCmcRanksFromMap_(ids);
+  } catch (e) {
+    Logger.log('maybeBackfillCmcRanks_ ' + e);
+  }
 }
 
 function migrateLegacyPriceStore() {
@@ -1867,13 +2031,17 @@ function readCoinMeta(value) {
   if (!key) return null;
 
   const fromRegistry = lookupRegistry(key);
+  const stored = readStoredCoinData(key);
+  const cmcRank = stored ? parseCmcRank_(stored.cmcRank) : null;
+
   if (fromRegistry && fromRegistry.name) {
     return {
       id: fromRegistry.id,
       symbol: fromRegistry.symbol || '',
       name: fromRegistry.name,
       tvSymbol: fromRegistry.tvSymbol || null,
-      tvExchange: fromRegistry.tvExchange || null
+      tvExchange: fromRegistry.tvExchange || null,
+      cmcRank: cmcRank
     };
   }
 
@@ -1898,12 +2066,12 @@ function readCoinMeta(value) {
           symbol: parsed.symbol,
           name: parsed.name
         });
+        if (!parseCmcRank_(parsed.cmcRank) && cmcRank) parsed.cmcRank = cmcRank;
         return parsed;
       }
     } catch (e) {}
   }
 
-  const stored = readStoredCoinData(key);
   if (stored && stored.name) {
     saveCoinToRegistry({
       id: stored.id,
@@ -1914,7 +2082,8 @@ function readCoinMeta(value) {
       id: stored.id,
       symbol: stored.symbol,
       name: stored.name,
-      price: stored.price
+      price: stored.price,
+      cmcRank: cmcRank
     };
   }
 
@@ -1940,6 +2109,7 @@ function buildCoinMetaMap(coins) {
         name: meta.name,
         tvSymbol: meta.tvSymbol || null,
         tvExchange: meta.tvExchange || null,
+        cmcRank: parseCmcRank_(meta.cmcRank),
         resolved: true,
         ambiguous: isAmbiguous
       };
@@ -2259,6 +2429,10 @@ function fetchPricesForCoins(coins, forceRefresh) {
   }
 
   if (updatedCount > 0) {
+    try { updateCmcRanksFromMap_(ids); } catch (e) {}
+  }
+
+  if (updatedCount > 0) {
     markPriceApiFetched();
   }
 
@@ -2372,13 +2546,17 @@ function getSetupInfo() {
       sheetRows: sheet ? sheet.getLastRow() : 0,
       sheetNames: sheetNames,
       bound: !!SpreadsheetApp.getActiveSpreadsheet(),
-      autoSync: autoSync
+      autoSync: autoSync,
+      appVersion: APP_VERSION,
+      githubRepoUrl: GITHUB_REPO_URL
     };
   } catch (e) {
     return {
       scriptEditorUrl: getScriptEditorUrl(),
       error: String(e),
-      autoSync: autoSync
+      autoSync: autoSync,
+      appVersion: APP_VERSION,
+      githubRepoUrl: GITHUB_REPO_URL
     };
   }
 }
@@ -2482,8 +2660,8 @@ function authorizeSendMail() {
 function requestCmcQuote(type, value) {
   const param = type === 'symbol' ? 'symbol' : 'id';
   const endpoints = [
-    'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?' + param + '=' + encodeURIComponent(value),
-    'https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?' + param + '=' + encodeURIComponent(value)
+    cmcQuoteLatestUrl_(1, param, value),
+    cmcQuoteLatestUrl_(2, param, value)
   ];
 
   const options = {
@@ -2572,7 +2750,8 @@ function storeCoinPrice(coinData, cache) {
     id: id,
     symbol: symbol || '',
     name: name,
-    price: price
+    price: price,
+    cmcRank: extractCmcRank_(coinData)
   };
 
   cache.put('CRYPTO_ID_' + id, price.toString(), PRICE_CACHE_TTL_SEC);
@@ -2619,6 +2798,12 @@ function updateAllCoins() {
       checkPriceAlerts();
     } catch (alertErr) {
       Logger.log('checkPriceAlerts failed: ' + alertErr);
+    }
+
+    try {
+      maybeNotifyOrApplyGithubUpdate_();
+    } catch (updateErr) {
+      Logger.log('github update check failed: ' + updateErr);
     }
 
     return result;
@@ -3569,7 +3754,7 @@ function checkPriceAlerts() {
 function processChunk(chunk, type, cache) {
   const param = type === 'symbol' ? 'symbol' : 'id';
   const values = chunk.join(',');
-  const url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?' + param + '=' + encodeURIComponent(values);
+  const url = cmcQuoteLatestUrl_(1, param, values);
 
   const options = {
     method: "GET",
@@ -3631,10 +3816,381 @@ function testApiForSui() {
 }
 
 /**
+ * Проверка версии на GitHub и (по желанию) применение файлов в этот проект.
+ * Google сам не подтягивает git: веб-приложение заморожено в развёртывании.
+ * Кнопка «Применить» обновляет исходники через Apps Script API и двигает /exec.
+ */
+function getAppUpdateInfo(forceRefresh) {
+  return fetchGithubUpdateInfo_(!!forceRefresh);
+}
+
+function setAutoApplyGithubUpdate(enabled) {
+  PropertiesService.getUserProperties().setProperty(APP_AUTO_APPLY_PROP, enabled ? '1' : '0');
+  return {
+    success: true,
+    autoApply: !!enabled,
+    message: enabled
+      ? 'Новые версии с GitHub будут применяться сами, когда сработает часовой триггер.'
+      : 'Автоприменение выключено. Останется баннер и уведомление.'
+  };
+}
+
+function fetchGithubUpdateInfo_(forceRefresh) {
+  const cache = CacheService.getScriptCache();
+  if (!forceRefresh) {
+    const cached = cache.get(APP_UPDATE_CACHE_KEY);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {}
+    }
+  }
+
+  const info = {
+    localVersion: APP_VERSION,
+    remoteVersion: '',
+    hasUpdate: false,
+    commitMessage: '',
+    commitDate: '',
+    commitUrl: '',
+    repoUrl: GITHUB_REPO_URL,
+    compareUrl: GITHUB_REPO_URL + '/commits/' + GITHUB_BRANCH,
+    autoApply: PropertiesService.getUserProperties().getProperty(APP_AUTO_APPLY_PROP) === '1',
+    error: ''
+  };
+
+  try {
+    const verRes = githubFetch_(
+      'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/VERSION'
+    );
+    if (verRes.code === 200) {
+      info.remoteVersion = String(verRes.text || '').trim().split(/\s+/)[0].replace(/^v/i, '');
+    } else if (verRes.code === 404) {
+      info.error = 'В репозитории нет файла VERSION — проверка появится после первого пуша с ним.';
+    } else {
+      info.error = 'GitHub VERSION: HTTP ' + verRes.code;
+    }
+
+    const commitRes = githubFetch_(
+      'https://api.github.com/repos/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/commits/' + GITHUB_BRANCH
+    );
+    if (commitRes.code === 200) {
+      const commit = JSON.parse(commitRes.text);
+      const msg = commit.commit && commit.commit.message ? String(commit.commit.message) : '';
+      info.commitMessage = msg.split('\n')[0];
+      info.commitDate = commit.commit && commit.commit.committer ? (commit.commit.committer.date || '') : '';
+      info.commitUrl = commit.html_url || '';
+    }
+
+    if (info.remoteVersion) {
+      info.hasUpdate = compareSemver_(info.remoteVersion, info.localVersion) > 0;
+    }
+  } catch (e) {
+    info.error = formatApiError(e);
+  }
+
+  try {
+    cache.put(APP_UPDATE_CACHE_KEY, JSON.stringify(info), APP_UPDATE_CACHE_SEC);
+  } catch (e) {}
+
+  return info;
+}
+
+function githubFetch_(url) {
+  const isApi = String(url).indexOf('api.github.com') !== -1;
+  const headers = { 'User-Agent': 'vault-crypto-portfolio' };
+  if (isApi) headers.Accept = 'application/vnd.github+json';
+  const response = UrlFetchApp.fetch(url, {
+    method: 'get',
+    muteHttpExceptions: true,
+    followRedirects: true,
+    headers: headers
+  });
+  return {
+    code: response.getResponseCode(),
+    text: response.getContentText() || ''
+  };
+}
+
+function compareSemver_(a, b) {
+  function parts(v) {
+    return String(v || '0').replace(/^v/i, '').split(/[.-]/).map(function(x) {
+      const n = parseInt(x, 10);
+      return isNaN(n) ? 0 : n;
+    });
+  }
+  const pa = parts(a);
+  const pb = parts(b);
+  const n = Math.max(pa.length, pb.length, 3);
+  for (let i = 0; i < n; i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da > db) return 1;
+    if (da < db) return -1;
+  }
+  return 0;
+}
+
+function maybeNotifyOrApplyGithubUpdate_() {
+  const info = fetchGithubUpdateInfo_(true);
+  if (!info.hasUpdate || !info.remoteVersion) return info;
+
+  if (info.autoApply) {
+    const applied = applyGithubUpdate();
+    if (applied && applied.success) return applied;
+  }
+
+  const props = PropertiesService.getUserProperties();
+  if (props.getProperty(APP_UPDATE_NOTIFIED_PROP) === info.remoteVersion) return info;
+
+  const telegram = getTelegramSettings_();
+  if (telegram.token && telegram.chatId) {
+    const lines = [
+      'Доступно обновление Vault ' + info.remoteVersion + ' (у вас ' + info.localVersion + ').',
+      info.commitMessage ? ('Коммит: ' + info.commitMessage) : '',
+      'Откройте портфель и нажмите «Применить обновление», либо скопируйте Code.gs и index.html с GitHub.',
+      info.repoUrl
+    ].filter(Boolean);
+    try {
+      sendTelegramMessage_(telegram.token, telegram.chatId, lines.join('\n'));
+      props.setProperty(APP_UPDATE_NOTIFIED_PROP, info.remoteVersion);
+    } catch (e) {
+      Logger.log('github update telegram failed: ' + e);
+    }
+  }
+
+  return info;
+}
+
+/**
+ * Один раз в редакторе Apps Script: authorizeGithubUpdate → ▶ Выполнить → Разрешить.
+ * Нужно, чтобы кнопка «Применить обновление» могла записать файлы в этот проект.
+ */
+function authorizeGithubUpdate() {
+  const result = scriptApi_('get', '/projects/' + ScriptApp.getScriptId());
+  return {
+    success: result.code === 200,
+    status: result.code,
+    message: result.code === 200
+      ? 'Доступ к проекту Apps Script выдан. Теперь обновление можно применять из портфеля.'
+      : 'Не удалось получить доступ к проекту (HTTP ' + result.code + '). Добавьте в appsscript.json scopes script.projects и script.deployments, затем выполните функцию снова.'
+  };
+}
+
+function applyGithubUpdate() {
+  const info = fetchGithubUpdateInfo_(true);
+  if (!info.hasUpdate) {
+    return {
+      success: false,
+      upToDate: true,
+      localVersion: APP_VERSION,
+      remoteVersion: info.remoteVersion || APP_VERSION,
+      message: 'У вас уже актуальная версия ' + APP_VERSION + '.'
+    };
+  }
+
+  const codeRes = githubFetch_(
+    'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/Code.gs'
+  );
+  const htmlRes = githubFetch_(
+    'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/index.html'
+  );
+  if (codeRes.code !== 200 || htmlRes.code !== 200) {
+    return {
+      success: false,
+      error: 'Не удалось скачать файлы с GitHub (Code.gs HTTP ' + codeRes.code + ', index.html HTTP ' + htmlRes.code + ').'
+    };
+  }
+
+  const project = scriptApi_('get', '/projects/' + ScriptApp.getScriptId() + '/content');
+  if (isScriptApiAuthError_(project.code, project.text)) {
+    return {
+      success: false,
+      needsAuth: true,
+      error: 'Нужно один раз выдать доступ к проекту: в Apps Script выберите authorizeGithubUpdate → ▶ Выполнить → Разрешить. В манифесте должны быть scopes script.projects и script.deployments.'
+    };
+  }
+  if (project.code !== 200 || !project.body || !project.body.files) {
+    return {
+      success: false,
+      needsAuth: project.code === 403 || project.code === 401,
+      error: 'Apps Script API не отдал файлы проекта (HTTP ' + project.code + ').'
+    };
+  }
+
+  const files = project.body.files.slice();
+  let currentKey = API_KEY;
+  files.forEach(function(file) {
+    if (['Code', 'Code.gs'].indexOf(file.name) === -1) return;
+    const fromFile = extractApiKey_(file.source);
+    if (fromFile && fromFile !== 'YOUR_API_KEY') currentKey = fromFile;
+  });
+  upsertProjectFile_(files, ['Code', 'Code.gs'], 'SERVER_JS', replaceApiKey_(codeRes.text, currentKey));
+  upsertProjectFile_(files, ['index', 'index.html'], 'HTML', htmlRes.text);
+
+  const manifestRes = githubFetch_(
+    'https://raw.githubusercontent.com/' + GITHUB_OWNER + '/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/appsscript.json'
+  );
+  if (manifestRes.code === 200) {
+    mergeAppsscriptManifest_(files, manifestRes.text);
+  }
+
+  const saved = scriptApi_('put', '/projects/' + ScriptApp.getScriptId() + '/content', { files: files });
+  if (saved.code !== 200) {
+    return {
+      success: false,
+      needsAuth: isScriptApiAuthError_(saved.code, saved.text),
+      error: 'Не удалось записать файлы в проект (HTTP ' + saved.code + ').'
+    };
+  }
+
+  let deployed = false;
+  let needsRedeploy = true;
+  const version = scriptApi_('post', '/projects/' + ScriptApp.getScriptId() + '/versions', {
+    description: 'Vault ' + info.remoteVersion + ' с GitHub'
+  });
+  if (version.code === 200 && version.body && version.body.versionNumber) {
+    const versionNumber = version.body.versionNumber;
+    const deployments = scriptApi_('get', '/projects/' + ScriptApp.getScriptId() + '/deployments');
+    if (deployments.code === 200 && deployments.body && deployments.body.deployments) {
+      const webApps = deployments.body.deployments.filter(function(d) {
+        const entries = d.entryPoints || [];
+        const isWeb = entries.some(function(ep) { return ep.entryPointType === 'WEB_APP'; });
+        return isWeb && d.deploymentConfig && d.deploymentConfig.versionNumber;
+      });
+      let updated = 0;
+      webApps.forEach(function(d) {
+        const cfg = d.deploymentConfig || {};
+        const put = scriptApi_('put', '/projects/' + ScriptApp.getScriptId() + '/deployments/' + d.deploymentId, {
+          deploymentConfig: {
+            versionNumber: versionNumber,
+            manifestFileName: cfg.manifestFileName || 'appsscript',
+            description: cfg.description || ('Vault ' + info.remoteVersion)
+          }
+        });
+        if (put.code === 200) updated++;
+      });
+      if (updated > 0) {
+        deployed = true;
+        needsRedeploy = false;
+      }
+    }
+  }
+
+  try {
+    CacheService.getScriptCache().remove(APP_UPDATE_CACHE_KEY);
+  } catch (e) {}
+  PropertiesService.getUserProperties().setProperty(APP_UPDATE_NOTIFIED_PROP, info.remoteVersion);
+
+  return {
+    success: true,
+    deployed: deployed,
+    needsRedeploy: needsRedeploy,
+    localVersion: APP_VERSION,
+    remoteVersion: info.remoteVersion,
+    message: needsRedeploy
+      ? 'Файлы обновлены в редакторе. Чтобы веб-ссылка подхватила код: Развернуть → Управление развёртываниями → карандаш → Новая версия. Затем обновите страницу.'
+      : 'Обновление ' + info.remoteVersion + ' применено. Обновите страницу.'
+  };
+}
+
+function extractApiKey_(source) {
+  const text = source || '';
+  const match = String(text).match(/const API_KEY\s*=\s*["']([^"']*)["']/);
+  return match ? match[1] : '';
+}
+
+function replaceApiKey_(source, apiKey) {
+  const key = apiKey && apiKey !== 'YOUR_API_KEY' ? apiKey : API_KEY;
+  if (!key || key === 'YOUR_API_KEY') return source;
+  if (/const API_KEY\s*=/.test(source)) {
+    return String(source).replace(
+      /const API_KEY\s*=\s*["'][^"']*["']\s*;/,
+      'const API_KEY = ' + JSON.stringify(key) + ';'
+    );
+  }
+  return 'const API_KEY = ' + JSON.stringify(key) + ';\n' + source;
+}
+
+function upsertProjectFile_(files, names, type, source) {
+  for (let i = 0; i < files.length; i++) {
+    if (names.indexOf(files[i].name) !== -1) {
+      files[i].source = source;
+      files[i].type = files[i].type || type;
+      return;
+    }
+  }
+  files.push({ name: names[0], type: type, source: source });
+}
+
+function mergeAppsscriptManifest_(files, remoteSource) {
+  let current = null;
+  for (let i = 0; i < files.length; i++) {
+    if (files[i].name === 'appsscript') {
+      current = files[i];
+      break;
+    }
+  }
+  let remote = {};
+  let local = {};
+  try { remote = JSON.parse(remoteSource); } catch (e) { return; }
+  if (current && current.source) {
+    try { local = JSON.parse(current.source); } catch (e) { local = {}; }
+  }
+  const merged = {};
+  Object.keys(local).forEach(function(k) { merged[k] = local[k]; });
+  ['exceptionLogging', 'runtimeVersion', 'dependencies'].forEach(function(k) {
+    if (merged[k] === undefined && remote[k] !== undefined) merged[k] = remote[k];
+  });
+  if (!merged.timeZone) merged.timeZone = local.timeZone || remote.timeZone;
+  const scopes = [];
+  function addScopes(list) {
+    (list || []).forEach(function(s) {
+      if (s && scopes.indexOf(s) === -1) scopes.push(s);
+    });
+  }
+  addScopes(local.oauthScopes);
+  addScopes(remote.oauthScopes);
+  if (scopes.length) merged.oauthScopes = scopes;
+  const source = JSON.stringify(merged, null, 2);
+  if (current) current.source = source;
+  else files.push({ name: 'appsscript', type: 'JSON', source: source });
+}
+
+function scriptApi_(method, path, payload) {
+  const options = {
+    method: String(method || 'get').toLowerCase(),
+    muteHttpExceptions: true,
+    headers: {
+      Authorization: 'Bearer ' + ScriptApp.getOAuthToken(),
+      Accept: 'application/json'
+    }
+  };
+  if (payload) {
+    options.contentType = 'application/json';
+    options.payload = JSON.stringify(payload);
+  }
+  const response = UrlFetchApp.fetch('https://script.googleapis.com/v1' + path, options);
+  const text = response.getContentText() || '';
+  let body = {};
+  try { body = JSON.parse(text); } catch (e) {}
+  return { code: response.getResponseCode(), body: body, text: text };
+}
+
+function isScriptApiAuthError_(code, text) {
+  const blob = String(text || '').toLowerCase();
+  return code === 401 || code === 403 ||
+    blob.indexOf('permission_denied') !== -1 ||
+    blob.indexOf('script.projects') !== -1 ||
+    blob.indexOf('script.deployments') !== -1;
+}
+
+/**
  * Первый запуск в редакторе Apps Script:
  * 1) authorizeExternalRequests → Разрешить
  * 2) authorizeSendMail → Разрешить (письма с алертами по цене)
  * 3) setupAutoUpdate → Разрешить (фоновая синхронизация каждый час, API — раз в 4 ч.)
+ * 4) authorizeGithubUpdate → Разрешить (кнопка «Применить обновление» с GitHub)
  */
 function setupAutoUpdate() {
   const triggers = ScriptApp.getProjectTriggers();
