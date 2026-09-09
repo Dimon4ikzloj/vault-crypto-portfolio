@@ -2879,7 +2879,7 @@
                                 </div>
                                 <div class="mini-stats">
                                     <div class="mini-stat">
-                                        <div class="label">Нереализованный P&L</div>
+                                        <div class="label">Нереализованный P&L / просадка</div>
                                         <div class="value pnl-up" id="totalProfit">$0.00</div>
                                         <div style="font-size:12px;margin-top:4px;" id="profitChange">↑ 0%</div>
                                     </div>
@@ -4138,17 +4138,19 @@
             var hasExisting = !!(h && h.amount > 0 && !h.isRecovered);
             var existingAmount = h ? h.amount : 0;
             var existingCostBasis = h ? h.costBasis : 0;
+            var existingMarketCostBasis = h ? h.marketCostBasis : 0;
             var existingAvgBuy = hasExisting ? h.avgBuy : 0;
             var currentPrice = snap ? snap.currentPrice : getCurrentPrice(coin);
             var totalPortfolioCost = snap ? snap.totalPortfolioCost : getTotalPortfolioCostBasis(globalHoldings);
 
-            var newAmount, newCostBasis, newTotalPortfolioCost, extraRows = '';
+            var newAmount, newCostBasis, newMarketCostBasis, newTotalPortfolioCost, extraRows = '';
 
             if (type === 'Аирдроп') {
                 var airdropAmount = parseFloat(document.getElementById('mAmount').value);
                 if (isNaN(airdropAmount) || airdropAmount <= 0) { hide(); return; }
                 newAmount = existingAmount + airdropAmount;
                 newCostBasis = existingCostBasis;
+                newMarketCostBasis = existingMarketCostBasis;
                 newTotalPortfolioCost = totalPortfolioCost;
             } else {
                 var useAmountMode = getTradeInputMode() === 'amount';
@@ -4174,27 +4176,28 @@
                         : 0;
                     var realizedPnl = h ? profitAfterSale - profitBeforeSale : null;
                     newAmount = existingAmount - tradeAmount;
-                    newCostBasis = existingAvgBuy > 0 ? Math.max(0, existingCostBasis - existingAvgBuy * tradeAmount) : Math.max(0, existingCostBasis - totalMoney);
+                    newCostBasis = h
+                        ? Math.max(0, h.totalBought - h.totalSoldCash - saleCash)
+                        : 0;
+                    newMarketCostBasis = existingAvgBuy > 0
+                        ? Math.max(0, existingMarketCostBasis - existingAvgBuy * tradeAmount)
+                        : Math.max(0, existingMarketCostBasis - totalMoney);
 
                     // Если ЭТА продажа перекроет всю выручку от продаж сверх
                     // вложенного — капитал полностью отбивается, остаток бесплатный.
                     var totalBoughtForCoin = h ? h.totalBought : 0;
-                    var newTotalSoldCash = (h ? h.totalSoldCash : 0) + totalMoney;
-                    if (totalBoughtForCoin > 0 && newTotalSoldCash >= totalBoughtForCoin - 0.000001) {
-                        newCostBasis = 0;
-                    }
-
                     newTotalPortfolioCost = Math.max(0, totalPortfolioCost - (existingCostBasis - newCostBasis));
                     extraRows += '<div class="sim-row"><span>Реализованный P&L по сделке</span><strong>' +
                         (realizedPnl === null ? '—' : (realizedPnl >= 0 ? '+' : '') + formatMoney(realizedPnl)) + '</strong></div>';
                 } else {
                     newAmount = existingAmount + tradeAmount;
                     newCostBasis = existingCostBasis + totalMoney;
+                    newMarketCostBasis = existingMarketCostBasis + totalMoney;
                     newTotalPortfolioCost = totalPortfolioCost + totalMoney;
                 }
             }
 
-            var newAvgBuy = newAmount > 0.000001 ? newCostBasis / newAmount : 0;
+            var newAvgBuy = newAmount > 0.000001 ? newMarketCostBasis / newAmount : 0;
             var refPrice = (currentPrice !== null && currentPrice > 0) ? currentPrice : (existingAvgBuy || newAvgBuy || 0);
             var oldPnl = (existingAvgBuy > 0 && refPrice > 0) ? calcPnlPct(refPrice, existingAvgBuy) : null;
             var newPnl = (newAvgBuy > 0 && refPrice > 0) ? calcPnlPct(refPrice, newAvgBuy) : null;
@@ -5161,7 +5164,8 @@
             var addAmount = addUsd / addPrice;
             var newAmount = h.amount + addAmount;
             var newCostBasis = h.costBasis + addUsd;
-            var newAvgBuy = newAmount > 0 ? newCostBasis / newAmount : 0;
+            var newMarketCostBasis = h.marketCostBasis + addUsd;
+            var newAvgBuy = newAmount > 0 ? newMarketCostBasis / newAmount : 0;
 
             if (newAmount <= 0 || newAvgBuy <= 0) {
                 resultEl.textContent = 'Некорректные параметры докупки.';
@@ -6650,6 +6654,7 @@
                 totalBought: 0,
                 totalSoldCash: 0,
                 costBasis: 0,
+                marketCostBasis: 0,
                 realizedPnL: 0,
                 sold: 0,
                 avgBuy: 0,
@@ -6669,6 +6674,7 @@
                 h.amount += tx.amount;
                 h.totalBought += buyCost;
                 h.costBasis += buyCost;
+                h.marketCostBasis += buyCost;
             } else if (tx.type === 'Аирдроп') {
                 // Бесплатные монеты не добавляют стоимости, но "размывают"
                 // среднюю цену входа — costBasis не меняется, только
@@ -6678,6 +6684,7 @@
                 h.amount += tx.amount || 1;
                 h.totalBought += tx.total;
                 h.costBasis += tx.total;
+                h.marketCostBasis += tx.total;
                 h.isScam = true;
             } else if (tx.type === 'Продажа') {
                 // При частичной продаже себестоимость оставшихся монет
@@ -6707,7 +6714,10 @@
                     var profitAfterSale = Math.max(0, h.totalSoldCash - h.totalBought);
                     realizedForSale = profitAfterSale - profitBeforeSale;
                     var costRemoved = avgBeforeSale * soldAmount;
-                    h.costBasis = Math.max(0, h.costBasis - costRemoved);
+                    h.marketCostBasis = Math.max(0, h.marketCostBasis - costRemoved);
+                    // Вложено — это именно тело, которое ещё не возвращено,
+                    // а не пропорциональная себестоимость оставшихся монет.
+                    h.costBasis = Math.max(0, h.totalBought - h.totalSoldCash);
                 } else {
                     realizedForSale = -fee;
                 }
@@ -6727,12 +6737,12 @@
             // Это отдельная проверка поверх учёта по средней цене — именно
             // она даёт эффект "Капитал отбит" без искажения цены входа при
             // обычных частичных продажах, которые не отбивают всю сумму.
-            if (h.totalBought > 0 && h.totalSoldCash >= h.totalBought - 0.000001) {
-                h.costBasis = 0;
+            if (h.totalBought > 0) {
+                h.costBasis = Math.max(0, h.totalBought - h.totalSoldCash);
             }
 
             h.isRecovered = h.amount > 0 && h.costBasis <= 0.000001;
-            h.avgBuy = h.amount > 0 && h.costBasis > 0 ? h.costBasis / h.amount : 0;
+            h.avgBuy = h.amount > 0 && h.marketCostBasis > 0 ? h.marketCostBasis / h.amount : 0;
             return realized;
         }
 
@@ -6773,19 +6783,26 @@
 
         function renderStats(portfolio) {
             var holdings = portfolio.holdings;
-            var currentVal = 0, totalCost = 0;
+            var currentVal = 0, totalCost = 0, drawdown = 0;
             Object.keys(holdings).forEach(function(c) {
                 var h = holdings[c];
                 if (h.amount > 0) {
-                    currentVal += h.amount * getLivePrice(c, h.avgBuy);
+                    var positionValue = h.amount * getLivePrice(c, h.avgBuy);
+                    currentVal += positionValue;
                     totalCost += h.costBasis;
+                    if (h.isScam) {
+                        drawdown -= h.costBasis;
+                    } else if (!h.isRecovered) {
+                        drawdown += Math.min(0, positionValue - h.costBasis);
+                    }
                 }
             });
             // В пользовательской модели рост открытой позиции не считается
             // прибылью. Прибыль появляется только в момент продажи после
-            // полного возврата вложенного капитала.
-            var pnl = 0;
-            var pnlPct = null;
+            // полного возврата вложенного капитала. Просадку при этом
+            // показываем, чтобы риск открытых позиций не скрывался.
+            var pnl = drawdown;
+            var pnlPct = totalCost > 0 ? (pnl / totalCost * 100) : null;
 
             document.getElementById('totalBalance').textContent = formatMoney(currentVal);
             document.getElementById('donutCenterValue').textContent = formatMoney(totalCost);
@@ -6800,13 +6817,15 @@
                     ' <span style="color:var(--text-muted);font-size:12px">· за вычетом продаж</span>';
             }
 
-            document.getElementById('totalChange').innerHTML =
-                '<span class="pnl-up">— прибыль по открытым позициям не зафиксирована</span>';
+            document.getElementById('totalChange').innerHTML = pnl < 0
+                ? '<span class="pnl-down">↓ ' + formatMoney(Math.abs(pnl)) + ' просадка открытых позиций</span>'
+                : '<span class="pnl-up">— прибыль по открытым позициям не зафиксирована</span>';
 
             document.getElementById('totalProfit').textContent = formatMoney(pnl);
             document.getElementById('totalProfit').className = 'value ' + (pnl >= 0 ? 'pnl-up' : 'pnl-down');
-            document.getElementById('profitChange').innerHTML =
-                '<span class="pnl-up">зафиксируется при продаже</span>';
+            document.getElementById('profitChange').innerHTML = pnl < 0
+                ? '<span class="pnl-down">↓ ' + Math.abs(pnlPct || 0).toFixed(2) + '%</span>'
+                : '<span class="pnl-up">зафиксируется при продаже</span>';
 
             document.getElementById('totalLoss').textContent = formatMoney(portfolio.totalRealizedPnL);
             document.getElementById('lossChange').textContent = portfolio.totalRealizedPnL >= 0 ? 'В плюсе' : 'В минусе';
@@ -7572,6 +7591,9 @@
                 var price = currentPrice !== null ? currentPrice : h.avgBuy;
                 var posVal = h.amount * price;
                 var invested = h.costBasis;
+                var pnlPct = !h.isRecovered && h.avgBuy > 0 && currentPrice !== null
+                    ? ((currentPrice - h.avgBuy) / h.avgBuy * 100) : null;
+                var sparkSign = pnlPct === null ? '' : (pnlPct >= 0 ? '↑' : '↓');
                 var color = colors[idx];
 
                 var avgBuyHtml = h.isScam
@@ -7582,9 +7604,11 @@
                 var investedHtml = h.isRecovered && !h.isScam
                     ? '<span class="mono" style="font-weight:500;color:var(--green)">' + formatMoney(0) + '<span class="recovered-tag">отбито</span></span>'
                     : '<span class="mono" style="font-weight:500;color:var(--text-secondary)">' + formatMoney(invested) + '</span>';
-                // В режиме «отбить тело» открытая позиция не является
-                // прибылью: её стоимость показывается отдельной колонкой.
-                var unrealizedPnL = h.isScam ? -invested : 0;
+                // Открытая позиция показывает текущий рыночный результат,
+                // но верхняя статистика фиксирует только её просадку.
+                var unrealizedPnL = h.isScam
+                    ? -invested
+                    : (h.isRecovered ? 0 : (posVal - h.marketCostBasis));
                 var pnlHtml = '';
 
                 if (h.isScam) {
@@ -7601,9 +7625,12 @@
                     }
                     pnlHtml += '</div>';
                 } else if (currentPrice !== null) {
+                    var pctClass = unrealizedPnL >= 0 ? 'up' : 'down';
                     pnlHtml = '<div class="pnl-cell">' +
-                        '<div class="pnl-cell-amount pnl-up">—</div>' +
-                        '<div class="pnl-cell-sub">не зафикс.</div>';
+                        '<div class="pnl-cell-amount ' + (unrealizedPnL >= 0 ? 'pnl-up' : 'pnl-down') + '">' +
+                        (unrealizedPnL >= 0 ? '+' : '') + formatMoney(unrealizedPnL) + '</div>' +
+                        '<div class="pnl-cell-pct ' + pctClass + '">' + sparkSign + ' ' + Math.abs(pnlPct || 0).toFixed(2) + '%</div>' +
+                        '<div class="pnl-cell-sub">нереализ.</div>';
                     if (h.realizedPnL > 0) {
                         pnlHtml += '<div class="pnl-cell-sub realized">+' + formatMoney(h.realizedPnL) + ' реализ.</div>';
                     }
