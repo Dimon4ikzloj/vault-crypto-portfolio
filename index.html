@@ -3631,7 +3631,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.2.7';
+        var VAULT_APP_VERSION = '1.2.8';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
         var portfolioModalMode = 'create';
@@ -4638,28 +4638,26 @@
         var alertModalCoin = '';
         var alertModalAvgBuy = 0;
 
+        /* Применяет пакет настроек уведомлений (алерты + email + Telegram).
+           Приходит внутри ответа getTransactions как alertSettings, поэтому при
+           загрузке портфеля отдельных запросов за ним больше нет. */
+        function applyAlertSettingsBundle(bundle) {
+            if (!bundle) return;
+            priceAlertsCache = bundle.alerts || [];
+            renderPriceAlertsList();
+            renderAlertModalList();
+
+            var input = document.getElementById('alertEmailInput');
+            if (input && bundle.email) input.value = bundle.email;
+
+            if (bundle.telegram) renderTelegramBotStatus(bundle.telegram);
+        }
+
         function loadPriceAlerts() {
             google.script.run
-                .withSuccessHandler(function(alerts) {
-                    priceAlertsCache = alerts || [];
-                    renderPriceAlertsList();
-                    renderAlertModalList();
-                })
+                .withSuccessHandler(applyAlertSettingsBundle)
                 .withFailureHandler(function() {})
-                .getPriceAlerts();
-
-            google.script.run
-                .withSuccessHandler(function(email) {
-                    var input = document.getElementById('alertEmailInput');
-                    if (input && email) input.value = email;
-                })
-                .withFailureHandler(function() {})
-                .getAlertEmail();
-
-            google.script.run
-                .withSuccessHandler(renderTelegramBotStatus)
-                .withFailureHandler(function() {})
-                .getTelegramBotStatus();
+                .getAlertSettingsBundle();
         }
 
         function renderTelegramBotStatus(status) {
@@ -6067,7 +6065,11 @@
                     showToast('Данные загружены (' + transactions.length + ' сделок)');
                 }
             }
-            if (options.reloadAlerts !== false) loadPriceAlerts();
+            if (result.alertSettings) {
+                applyAlertSettingsBundle(result.alertSettings);
+            } else if (options.reloadAlerts !== false) {
+                loadPriceAlerts();
+            }
             showLoading(false);
         }
 
@@ -6080,6 +6082,8 @@
                 .withFailureHandler(function(err) {
                     showLoading(false);
                     showToast('Ошибка загрузки: ' + (err.message || err), 'error');
+                    // Портфель не пришёл — настройки уведомлений подтянем отдельно.
+                    loadPriceAlerts();
                 })
                 .getTransactionsWithAutoSync();
         }
@@ -7819,7 +7823,8 @@
             if (!allowed[allocationSortMode]) allocationSortMode = 'default';
             select.value = allocationSortMode;
         })();
-        loadPriceAlerts();
+        // Алерты/email/Telegram приходят внутри ответа refreshData() (alertSettings) —
+        // отдельный loadPriceAlerts() при старте больше не нужен.
         initPwaInstall();
         refreshData();
 

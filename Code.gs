@@ -3,7 +3,7 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.2.7';
+const APP_VERSION = '1.2.8';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
@@ -49,6 +49,46 @@ const DEFAULT_COINS = [
   "32198", "6636", "8916", "36020", "37263", "20362", "33734", "8646", "24087", "25114", 
   "28066", "6535", "8534", "21159", "38770", "38515", "7737", "1027"
 ];
+
+// ─── Кэш Properties на время одного исполнения ───
+// PropertiesService.getProperty() — сетевой вызов (~10–50 мс). Раньше он делался
+// по несколько раз на каждую монету. Теперь все свойства читаются одним
+// getProperties() и дальше живут в памяти; записи идут и в сервис, и в память.
+var propsMemo_ = { script: null, user: null };
+
+function propsService_(kind) {
+  return kind === 'user' ? PropertiesService.getUserProperties() : PropertiesService.getScriptProperties();
+}
+
+function propsAll_(kind) {
+  if (!propsMemo_[kind]) {
+    propsMemo_[kind] = propsService_(kind).getProperties() || {};
+  }
+  return propsMemo_[kind];
+}
+
+function getProp_(kind, key) {
+  const value = propsAll_(kind)[key];
+  return (value === undefined || value === null) ? null : value;
+}
+
+function setProp_(kind, key, value) {
+  const str = String(value);
+  propsService_(kind).setProperty(key, str);
+  propsAll_(kind)[key] = str;
+}
+
+function deleteProp_(kind, key) {
+  propsService_(kind).deleteProperty(key);
+  delete propsAll_(kind)[key];
+}
+
+function getScriptProp_(key) { return getProp_('script', key); }
+function setScriptProp_(key, value) { setProp_('script', key, value); }
+function deleteScriptProp_(key) { deleteProp_('script', key); }
+function getUserProp_(key) { return getProp_('user', key); }
+function setUserProp_(key, value) { setProp_('user', key, value); }
+function deleteUserProp_(key) { deleteProp_('user', key); }
 
 function doGet(e) {
   const page = e && e.parameter ? e.parameter.page : '';
@@ -155,8 +195,7 @@ function servePwaIcon() {
  * Возвращает список всех отслеживаемых монет (из памяти или базовый)
  */
 function getTrackedCoins() {
-  const userProperties = PropertiesService.getUserProperties();
-  const saved = userProperties.getProperty('TRACKED_COINS_LIST');
+  const saved = getUserProp_('TRACKED_COINS_LIST');
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
@@ -181,7 +220,7 @@ function isPortfolioAsset(value) {
  * Список тикеров пользователя для быстрого выбора в форме сделок
  */
 function getUserAssets() {
-  const saved = PropertiesService.getUserProperties().getProperty(scopedUserPropKey_(USER_ASSETS_PROP));
+  const saved = getUserProp_(scopedUserPropKey_(USER_ASSETS_PROP));
   let list = [];
   if (saved) {
     try {
@@ -203,7 +242,7 @@ function saveUserAssets(list) {
       normalized.push(asset);
     }
   });
-  PropertiesService.getUserProperties().setProperty(scopedUserPropKey_(USER_ASSETS_PROP), JSON.stringify(normalized));
+  setUserProp_(scopedUserPropKey_(USER_ASSETS_PROP), JSON.stringify(normalized));
   return normalized;
 }
 
@@ -222,7 +261,7 @@ function addUserAsset(coin) {
 const COIN_LOCATIONS_PROP = 'COIN_LOCATIONS';
 
 function getCoinLocations() {
-  const saved = PropertiesService.getUserProperties().getProperty(scopedUserPropKey_(COIN_LOCATIONS_PROP));
+  const saved = getUserProp_(scopedUserPropKey_(COIN_LOCATIONS_PROP));
   if (!saved) return {};
   try {
     const parsed = JSON.parse(saved);
@@ -252,7 +291,7 @@ function saveCoinLocation(coin, location, aliases) {
     else delete map[k];
   });
 
-  PropertiesService.getUserProperties().setProperty(scopedUserPropKey_(COIN_LOCATIONS_PROP), JSON.stringify(map));
+  setUserProp_(scopedUserPropKey_(COIN_LOCATIONS_PROP), JSON.stringify(map));
   return { success: true, locations: map };
 }
 
@@ -260,6 +299,7 @@ function syncUserAssetsFromTransactions(transactions) {
   const list = getUserAssets();
   const seen = {};
   list.forEach(function(c) { seen[c] = true; });
+  let changed = false;
 
   (transactions || []).forEach(function(tx) {
     const raw = String(tx.coin || '').trim();
@@ -267,10 +307,13 @@ function syncUserAssetsFromTransactions(transactions) {
     if (isPortfolioAsset(asset) && !seen[asset]) {
       list.push(asset);
       seen[asset] = true;
+      changed = true;
     }
   });
 
-  return saveUserAssets(list);
+  // Запись в Properties — только если список реально пополнился
+  // (раньше писали при каждой загрузке портфеля).
+  return changed ? saveUserAssets(list) : list;
 }
 
 function addUserAssetCoin(coin) {
@@ -289,7 +332,7 @@ function addUserAssetCoin(coin) {
  * Ручные цены для делистнутых / скам-монет (нет котировки на CMC)
  */
 function getManualPrices() {
-  const saved = PropertiesService.getUserProperties().getProperty('MANUAL_PRICES');
+  const saved = getUserProp_('MANUAL_PRICES');
   if (!saved) return {};
   try {
     const parsed = JSON.parse(saved);
@@ -299,7 +342,7 @@ function getManualPrices() {
 }
 
 function saveManualPricesMap(map) {
-  PropertiesService.getUserProperties().setProperty('MANUAL_PRICES', JSON.stringify(map || {}));
+  setUserProp_('MANUAL_PRICES', JSON.stringify(map || {}));
 }
 
 function getManualPricesList() {
@@ -449,7 +492,7 @@ function addTrackedCoinOrId(newAsset) {
   }
   
   currentList.push(asset);
-  PropertiesService.getUserProperties().setProperty('TRACKED_COINS_LIST', JSON.stringify(currentList));
+  setUserProp_('TRACKED_COINS_LIST', JSON.stringify(currentList));
 
   return { success: true, list: currentList, price: readCachedPrice(asset), meta: readCoinMeta(asset) };
 }
@@ -481,7 +524,7 @@ function ensureCoinsTracked(coins) {
   });
 
   if (changed) {
-    PropertiesService.getUserProperties().setProperty('TRACKED_COINS_LIST', JSON.stringify(currentList));
+    setUserProp_('TRACKED_COINS_LIST', JSON.stringify(currentList));
   }
 
   return currentList;
@@ -494,7 +537,7 @@ function getSpreadsheet() {
   const active = SpreadsheetApp.getActiveSpreadsheet();
   if (active) return active;
 
-  const id = PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');
+  const id = getScriptProp_('SPREADSHEET_ID');
   if (id) {
     try {
       return SpreadsheetApp.openById(String(id).trim());
@@ -514,7 +557,7 @@ function scopedUserPropKey_(base, portfolioId) {
 
 function getActivePortfolioIdSafe_() {
   try {
-    const raw = PropertiesService.getUserProperties().getProperty(PORTFOLIOS_PROP);
+    const raw = getUserProp_(PORTFOLIOS_PROP);
     if (!raw) return DEFAULT_PORTFOLIO_ID;
     const data = JSON.parse(raw);
     return (data && data.activeId) || DEFAULT_PORTFOLIO_ID;
@@ -542,7 +585,7 @@ function publicPortfolios_(registry) {
 }
 
 function savePortfoliosRegistry_(data) {
-  PropertiesService.getUserProperties().setProperty(PORTFOLIOS_PROP, JSON.stringify({
+  setUserProp_(PORTFOLIOS_PROP, JSON.stringify({
     activeId: data.activeId,
     items: data.items || []
   }));
@@ -577,10 +620,9 @@ function createDealsSheet_(ss, sheetName) {
 }
 
 function ensurePortfoliosRegistry_(ss, createIfMissing) {
-  const props = PropertiesService.getUserProperties();
   let data = null;
   try {
-    const raw = props.getProperty(PORTFOLIOS_PROP);
+    const raw = getUserProp_(PORTFOLIOS_PROP);
     if (raw) data = JSON.parse(raw);
   } catch (e) {}
 
@@ -620,16 +662,15 @@ function withPortfolios_(payload, info) {
 }
 
 function deleteScopedPortfolioProps_(id) {
-  const props = PropertiesService.getUserProperties();
   if (!id || id === DEFAULT_PORTFOLIO_ID) {
-    props.deleteProperty('PRICE_ALERTS_LIST');
-    props.deleteProperty(COIN_LOCATIONS_PROP);
-    props.deleteProperty(USER_ASSETS_PROP);
+    deleteUserProp_('PRICE_ALERTS_LIST');
+    deleteUserProp_(COIN_LOCATIONS_PROP);
+    deleteUserProp_(USER_ASSETS_PROP);
     return;
   }
-  props.deleteProperty('PRICE_ALERTS_LIST::' + id);
-  props.deleteProperty(COIN_LOCATIONS_PROP + '::' + id);
-  props.deleteProperty(USER_ASSETS_PROP + '::' + id);
+  deleteUserProp_('PRICE_ALERTS_LIST::' + id);
+  deleteUserProp_(COIN_LOCATIONS_PROP + '::' + id);
+  deleteUserProp_(USER_ASSETS_PROP + '::' + id);
 }
 
 function collectAllPortfolioCoins_(ss, registry) {
@@ -978,7 +1019,7 @@ function getTransactions() {
 
     try {
       ensureCoinsTracked(parsed.uniqueCoinsInPortfolio);
-      migrateLegacyPriceStore();
+      runLegacyStoreMigrationsOnce_();
       const scamCoins = getScamCoinSet(parsed.transactions);
 
       parsed.uniqueCoinsInPortfolio.forEach(function(coin) {
@@ -1019,7 +1060,8 @@ function getTransactions() {
       sheetName: sheet.getName(),
       spreadsheetUrl: ss.getUrl(),
       coinLocations: getCoinLocations(),
-      portfolios: publicPortfolios_(info.portfolios)
+      portfolios: publicPortfolios_(info.portfolios),
+      alertSettings: getAlertSettingsBundle()
     };
   } catch (e) {
     return buildTransactionsError(String(e));
@@ -1689,19 +1731,19 @@ function updateTransaction(data) {
  * Реализация подсистемы CoinMarketCap API & кэширования (не чаще 1 раза в 2 часа)
  */
 function getLastPriceFetchTime() {
-  return parseInt(PropertiesService.getScriptProperties().getProperty('LAST_PRICE_FETCH_MS') || '0', 10);
+  return parseInt(getScriptProp_('LAST_PRICE_FETCH_MS') || '0', 10);
 }
 
 function getLastSuccessfulSyncTime() {
-  return parseInt(PropertiesService.getScriptProperties().getProperty('LAST_SUCCESSFUL_SYNC_MS') || '0', 10);
+  return parseInt(getScriptProp_('LAST_SUCCESSFUL_SYNC_MS') || '0', 10);
 }
 
 function markPriceApiFetched() {
-  PropertiesService.getScriptProperties().setProperty('LAST_PRICE_FETCH_MS', String(Date.now()));
+  setScriptProp_('LAST_PRICE_FETCH_MS', String(Date.now()));
 }
 
 function markSuccessfulSync() {
-  PropertiesService.getScriptProperties().setProperty('LAST_SUCCESSFUL_SYNC_MS', String(Date.now()));
+  setScriptProp_('LAST_SUCCESSFUL_SYNC_MS', String(Date.now()));
 }
 
 function canCallPriceApiNow() {
@@ -1714,7 +1756,7 @@ function canCallPriceApiNow() {
  * если нужно проверить синхронизацию сразу после исправления кода, не дожидаясь таймера).
  */
 function resetSyncThrottle() {
-  PropertiesService.getScriptProperties().deleteProperty('LAST_PRICE_FETCH_MS');
+  deleteScriptProp_('LAST_PRICE_FETCH_MS');
   return { success: true, message: 'Троттлинг сброшен. Теперь можно синхронизировать заново.' };
 }
 
@@ -1735,38 +1777,84 @@ function getPriceCacheInfo() {
 /**
  * Статус фонового триггера updateAllCoins (не зависит от открытия веб-приложения).
  */
-function getAutoSyncStatus() {
-  let triggers = [];
-  try {
-    triggers = ScriptApp.getProjectTriggers().filter(function(t) {
-      return t.getHandlerFunction() === 'updateAllCoins';
-    });
-  } catch (e) {
-    return { triggerInstalled: false, triggerCount: 0, error: String(e) };
+// ScriptApp.getProjectTriggers() — медленный вызов (сотни мс). Раньше он делался
+// 3–4 раза за одну загрузку. Теперь: результат запоминается на время исполнения,
+// а положительный ответ («триггер есть») ещё и кэшируется на 10 минут между
+// исполнениями. Отсутствие триггера не кэшируем, чтобы баннер «включите
+// фоновую синхронизацию» исчезал сразу после установки.
+const AUTO_SYNC_TRIGGER_CACHE_KEY = 'AUTO_SYNC_TRIGGER_COUNT';
+const AUTO_SYNC_TRIGGER_CACHE_SEC = 10 * 60;
+var autoSyncStatusMemo_ = null;
+var autoSyncTriggerCountMemo_ = null;
+
+function countAutoUpdateTriggers_(forceRefresh) {
+  if (!forceRefresh && autoSyncTriggerCountMemo_ !== null) return autoSyncTriggerCountMemo_;
+
+  const cache = CacheService.getScriptCache();
+  if (!forceRefresh) {
+    const cached = cache.get(AUTO_SYNC_TRIGGER_CACHE_KEY);
+    if (cached !== null && cached !== undefined && cached !== '') {
+      const n = parseInt(cached, 10);
+      if (!isNaN(n) && n > 0) {
+        autoSyncTriggerCountMemo_ = n;
+        return n;
+      }
+    }
   }
 
-  const props = PropertiesService.getScriptProperties();
-  const lastRun = parseInt(props.getProperty('LAST_TRIGGER_RUN_MS') || '0', 10);
+  const count = ScriptApp.getProjectTriggers().filter(function(t) {
+    return t.getHandlerFunction() === 'updateAllCoins';
+  }).length;
+
+  autoSyncTriggerCountMemo_ = count;
+  try {
+    if (count > 0) cache.put(AUTO_SYNC_TRIGGER_CACHE_KEY, String(count), AUTO_SYNC_TRIGGER_CACHE_SEC);
+    else cache.remove(AUTO_SYNC_TRIGGER_CACHE_KEY);
+  } catch (e) {}
+  return count;
+}
+
+function invalidateAutoSyncStatus_() {
+  autoSyncStatusMemo_ = null;
+  autoSyncTriggerCountMemo_ = null;
+  try {
+    CacheService.getScriptCache().remove(AUTO_SYNC_TRIGGER_CACHE_KEY);
+  } catch (e) {}
+}
+
+function getAutoSyncStatus(forceRefresh) {
+  if (!forceRefresh && autoSyncStatusMemo_) return autoSyncStatusMemo_;
+
+  let triggerCount = 0;
+  try {
+    triggerCount = countAutoUpdateTriggers_(!!forceRefresh);
+  } catch (e) {
+    autoSyncStatusMemo_ = { triggerInstalled: false, triggerCount: 0, error: String(e) };
+    return autoSyncStatusMemo_;
+  }
+
+  const lastRun = parseInt(getScriptProp_('LAST_TRIGGER_RUN_MS') || '0', 10);
   let lastResult = null;
   try {
-    lastResult = JSON.parse(props.getProperty('LAST_TRIGGER_RESULT') || 'null');
+    lastResult = JSON.parse(getScriptProp_('LAST_TRIGGER_RESULT') || 'null');
   } catch (ignore) {}
 
-  let lastTriggerError = props.getProperty('LAST_TRIGGER_ERROR') || null;
+  let lastTriggerError = getScriptProp_('LAST_TRIGGER_ERROR') || null;
   if (isTvOnlyTriggerError(lastTriggerError)) {
-    props.deleteProperty('LAST_TRIGGER_ERROR');
+    deleteScriptProp_('LAST_TRIGGER_ERROR');
     lastTriggerError = null;
   }
 
-  return {
-    triggerInstalled: triggers.length > 0,
-    triggerCount: triggers.length,
+  autoSyncStatusMemo_ = {
+    triggerInstalled: triggerCount > 0,
+    triggerCount: triggerCount,
     lastTriggerRunAt: lastRun || null,
     lastTriggerError: lastTriggerError,
-    lastTriggerTvWarning: props.getProperty('LAST_TRIGGER_TV_WARNING') || null,
+    lastTriggerTvWarning: getScriptProp_('LAST_TRIGGER_TV_WARNING') || null,
     tvPairsApiDisabled: isTvPairsApiDisabled(),
     lastTriggerResult: lastResult
   };
+  return autoSyncStatusMemo_;
 }
 
 /**
@@ -1775,16 +1863,15 @@ function getAutoSyncStatus() {
  */
 function ensureAutoUpdateTrigger() {
   try {
-    const existing = ScriptApp.getProjectTriggers().filter(function(t) {
-      return t.getHandlerFunction() === 'updateAllCoins';
-    });
-    if (existing.length > 0) {
-      return { installed: true, created: false, count: existing.length };
+    const existingCount = countAutoUpdateTriggers_(false);
+    if (existingCount > 0) {
+      return { installed: true, created: false, count: existingCount };
     }
     ScriptApp.newTrigger('updateAllCoins')
       .timeBased()
       .everyHours(1)
       .create();
+    invalidateAutoSyncStatus_();
     return {
       installed: true,
       created: true,
@@ -1839,19 +1926,30 @@ function normalizeCoinKey(coin) {
   return raw.toUpperCase();
 }
 
+// Разобранный реестр имён живёт в памяти до конца исполнения: раньше он
+// парсился заново по 3–5 раз на каждую монету.
+var namesRegistryMemo_ = null;
+
 function getNamesRegistry() {
+  if (namesRegistryMemo_) return namesRegistryMemo_;
   try {
-    const raw = PropertiesService.getScriptProperties().getProperty('COIN_NAMES_REGISTRY');
+    const raw = getScriptProp_('COIN_NAMES_REGISTRY');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        namesRegistryMemo_ = parsed;
+        return parsed;
+      }
     }
   } catch (e) {}
-  return {};
+  namesRegistryMemo_ = {};
+  return namesRegistryMemo_;
 }
 
 function saveNamesRegistry(registry) {
-  PropertiesService.getScriptProperties().setProperty('COIN_NAMES_REGISTRY', JSON.stringify(registry || {}));
+  const data = registry || {};
+  setScriptProp_('COIN_NAMES_REGISTRY', JSON.stringify(data));
+  namesRegistryMemo_ = data;
 }
 
 /**
@@ -2064,19 +2162,29 @@ function diagnoseCoinPrice(coinKey) {
   };
 }
 
+// Хранилище цен тоже держим разобранным в памяти на время исполнения.
+var priceStoreMemo_ = null;
+
 function getPriceStore() {
+  if (priceStoreMemo_) return priceStoreMemo_;
   try {
-    const raw = PropertiesService.getScriptProperties().getProperty('COIN_PRICE_STORE');
+    const raw = getScriptProp_('COIN_PRICE_STORE');
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        priceStoreMemo_ = parsed;
+        return parsed;
+      }
     }
   } catch (e) {}
-  return {};
+  priceStoreMemo_ = {};
+  return priceStoreMemo_;
 }
 
 function savePriceStore(store) {
-  PropertiesService.getScriptProperties().setProperty('COIN_PRICE_STORE', JSON.stringify(store || {}));
+  const data = store || {};
+  setScriptProp_('COIN_PRICE_STORE', JSON.stringify(data));
+  priceStoreMemo_ = data;
 }
 
 function parseCmcRank_(value) {
@@ -2169,9 +2277,11 @@ function updateCmcRanksFromMap_(ids) {
     seen[key] = true;
     unique.push(key);
   });
-  if (!unique.length) return 0;
+  if (!unique.length) return { updated: 0, okChunks: 0, totalChunks: 0 };
 
   let updated = 0;
+  let okChunks = 0;
+  let totalChunks = 0;
   const options = {
     method: 'GET',
     headers: { 'X-CMC_PRO_API_KEY': API_KEY, 'Accept': 'application/json' },
@@ -2180,6 +2290,7 @@ function updateCmcRanksFromMap_(ids) {
 
   for (let i = 0; i < unique.length; i += 100) {
     const chunk = unique.slice(i, i + 100);
+    totalChunks++;
     const url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?id=' +
       encodeURIComponent(chunk.join(',')) +
       '&listing_status=active,inactive,untracked';
@@ -2188,6 +2299,7 @@ function updateCmcRanksFromMap_(ids) {
 
     const payload = JSON.parse(response.getContentText());
     if (payload.status && payload.status.error_code !== 0) continue;
+    okChunks++;
 
     const raw = payload.data;
     const items = Array.isArray(raw) ? raw : (raw ? Object.keys(raw).map(function(k) { return raw[k]; }) : []);
@@ -2200,7 +2312,22 @@ function updateCmcRanksFromMap_(ids) {
     updated += applyCmcRanksToStore_(rankById);
   }
 
-  return updated;
+  return { updated: updated, okChunks: okChunks, totalChunks: totalChunks };
+}
+
+// Монеты, для которых CMC /map не вернул ранг (делистнутые, скам, неизвестные),
+// запоминаем и не переспрашиваем 7 дней. Раньше одна такая монета заставляла
+// ходить в API синхронно при загрузке страницы каждые 30 минут — бесконечно.
+const CMC_RANK_MISSING_PROP = 'CMC_RANK_MISSING_IDS';
+const CMC_RANK_MISSING_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+function getCmcRankMissingMap_() {
+  try {
+    const parsed = JSON.parse(getScriptProp_(CMC_RANK_MISSING_PROP) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
 }
 
 function maybeBackfillCmcRanks_(coins) {
@@ -2216,22 +2343,67 @@ function maybeBackfillCmcRanks_(coins) {
   });
   if (!ids.length) return;
 
-  let missing = 0;
+  const now = Date.now();
+  const missingMap = getCmcRankMissingMap_();
+  const toFetch = [];
   ids.forEach(function(id) {
     const stored = readStoredCoinData(id);
-    if (!stored || !parseCmcRank_(stored.cmcRank)) missing++;
+    if (stored && parseCmcRank_(stored.cmcRank)) return;
+    const lastMiss = missingMap[id];
+    if (lastMiss && now - lastMiss < CMC_RANK_MISSING_RETRY_MS) return;
+    toFetch.push(id);
   });
-  if (missing === 0) return;
+  if (!toFetch.length) return;
 
-  const props = PropertiesService.getScriptProperties();
-  const last = parseInt(props.getProperty('CMC_RANK_BACKFILL_MS') || '0', 10);
-  if (last && Date.now() - last < 30 * 60 * 1000) return;
-  props.setProperty('CMC_RANK_BACKFILL_MS', String(Date.now()));
+  const last = parseInt(getScriptProp_('CMC_RANK_BACKFILL_MS') || '0', 10);
+  if (last && now - last < 30 * 60 * 1000) return;
+  setScriptProp_('CMC_RANK_BACKFILL_MS', String(now));
 
+  let apiOk = false;
   try {
-    updateCmcRanksFromMap_(ids);
+    const res = updateCmcRanksFromMap_(toFetch);
+    apiOk = !!(res && res.totalChunks > 0 && res.okChunks === res.totalChunks);
   } catch (e) {
     Logger.log('maybeBackfillCmcRanks_ ' + e);
+  }
+  // При сетевой/HTTP-ошибке ничего не помечаем — попробуем через 30 минут.
+  if (!apiOk) return;
+
+  // Что так и осталось без ранга — помечаем, чтобы не спрашивать снова неделю.
+  let mapChanged = false;
+  toFetch.forEach(function(id) {
+    const stored = readStoredCoinData(id);
+    if (stored && parseCmcRank_(stored.cmcRank)) {
+      if (missingMap[id]) { delete missingMap[id]; mapChanged = true; }
+    } else {
+      missingMap[id] = now;
+      mapChanged = true;
+    }
+  });
+  if (mapChanged) setScriptProp_(CMC_RANK_MISSING_PROP, JSON.stringify(missingMap));
+}
+
+/**
+ * Разовые миграции старых форматов хранилища цен и реестра имён.
+ * Раньше выполнялись при каждой загрузке и из-за нестрогих проверок
+ * «изменилось ли» переписывали Properties на каждом открытии страницы.
+ * Теперь — один раз, после чего ставится флаг.
+ */
+const LEGACY_STORE_MIGRATION_FLAG = 'LEGACY_STORE_MIGRATED';
+const LEGACY_STORE_MIGRATION_VERSION = '1';
+
+function isLegacyStoreMigrated_() {
+  return getScriptProp_(LEGACY_STORE_MIGRATION_FLAG) === LEGACY_STORE_MIGRATION_VERSION;
+}
+
+function runLegacyStoreMigrationsOnce_() {
+  if (isLegacyStoreMigrated_()) return;
+  try {
+    migrateLegacyPriceStore();
+    migrateNamesFromPriceStore();
+    setScriptProp_(LEGACY_STORE_MIGRATION_FLAG, LEGACY_STORE_MIGRATION_VERSION);
+  } catch (e) {
+    Logger.log('legacy store migration: ' + e);
   }
 }
 
@@ -2242,13 +2414,19 @@ function migrateLegacyPriceStore() {
   Object.keys(store).forEach(function(k) {
     if (k.indexOf('SYM_') !== 0) return;
     const entry = store[k];
-    if (!entry || !entry.id) return;
+    if (!entry || !entry.id) {
+      delete store[k];
+      changed = true;
+      return;
+    }
     const idKey = 'ID_' + entry.id;
     const existing = store[idKey];
-    if (!existing || (entry.updatedAt || 0) >= (existing.updatedAt || 0)) {
+    if (!existing || (entry.updatedAt || 0) > (existing.updatedAt || 0)) {
       store[idKey] = entry;
-      changed = true;
     }
+    // Старый ключ больше не нужен: чтение идёт по ID_ и по полю symbol.
+    delete store[k];
+    changed = true;
   });
 
   if (changed) savePriceStore(store);
@@ -2366,15 +2544,15 @@ function readCoinMeta(value) {
 }
 
 function buildCoinMetaMap(coins) {
-  migrateNamesFromPriceStore();
+  runLegacyStoreMigrationsOnce_();
 
   const map = {};
+  const registry = getNamesRegistry();
   (coins || []).forEach(function(coin) {
     const key = normalizeCoinKey(coin);
     if (!key) return;
 
     const meta = readCoinMeta(key);
-    const registry = getNamesRegistry();
     const isAmbiguous = !isNumericId(key) && !!registry['AMBIG_' + key];
 
     if (meta && meta.name) {
@@ -2519,13 +2697,12 @@ function extractMarketPairsForId(data, coinId) {
  * Endpoint market-pairs доступен не на всех тарифах CMC (403 на Basic).
  */
 function isTvPairsApiDisabled() {
-  return PropertiesService.getScriptProperties().getProperty('TV_PAIRS_API_DISABLED') === '1';
+  return getScriptProp_('TV_PAIRS_API_DISABLED') === '1';
 }
 
 function disableTvPairsApi(reason) {
-  const props = PropertiesService.getScriptProperties();
-  props.setProperty('TV_PAIRS_API_DISABLED', '1');
-  if (reason) props.setProperty('TV_PAIRS_API_DISABLED_REASON', reason);
+  setScriptProp_('TV_PAIRS_API_DISABLED', '1');
+  if (reason) setScriptProp_('TV_PAIRS_API_DISABLED_REASON', reason);
 }
 
 function isTvOnlyTriggerError(message) {
@@ -3043,13 +3220,12 @@ function storeCoinPrice(coinData, cache) {
  * Запрос к CMC — не чаще раза в 2 часа (canCallPriceApiNow).
  */
 function updateAllCoins() {
-  const props = PropertiesService.getScriptProperties();
   const now = Date.now();
-  props.setProperty('LAST_TRIGGER_RUN_MS', String(now));
+  setScriptProp_('LAST_TRIGGER_RUN_MS', String(now));
 
   try {
     const result = syncPortfolioPrices(false);
-    props.setProperty('LAST_TRIGGER_RESULT', JSON.stringify({
+    setScriptProp_('LAST_TRIGGER_RESULT', JSON.stringify({
       at: now,
       fromApi: !!result.fromApi,
       updatedCount: result.updatedCount || 0,
@@ -3059,17 +3235,17 @@ function updateAllCoins() {
     }));
 
     if (result.errors && result.errors.length) {
-      props.setProperty('LAST_TRIGGER_ERROR', result.errors.join('; '));
+      setScriptProp_('LAST_TRIGGER_ERROR', result.errors.join('; '));
     } else if (result.error) {
-      props.setProperty('LAST_TRIGGER_ERROR', String(result.error));
+      setScriptProp_('LAST_TRIGGER_ERROR', String(result.error));
     } else {
-      props.deleteProperty('LAST_TRIGGER_ERROR');
+      deleteScriptProp_('LAST_TRIGGER_ERROR');
     }
 
     if (result.tvErrors && result.tvErrors.length) {
-      props.setProperty('LAST_TRIGGER_TV_WARNING', result.tvErrors[0]);
+      setScriptProp_('LAST_TRIGGER_TV_WARNING', result.tvErrors[0]);
     } else {
-      props.deleteProperty('LAST_TRIGGER_TV_WARNING');
+      deleteScriptProp_('LAST_TRIGGER_TV_WARNING');
     }
 
     try {
@@ -3086,7 +3262,7 @@ function updateAllCoins() {
 
     return result;
   } catch (e) {
-    props.setProperty('LAST_TRIGGER_ERROR', formatApiError(e));
+    setScriptProp_('LAST_TRIGGER_ERROR', formatApiError(e));
     throw e;
   }
 }
@@ -3107,7 +3283,7 @@ const TELEGRAM_BOT_USERNAME_PROP = 'TELEGRAM_BOT_USERNAME';
 const TELEGRAM_CHAT_LABEL_PROP = 'TELEGRAM_CHAT_LABEL';
 
 function getPriceAlerts(portfolioId) {
-  const saved = PropertiesService.getUserProperties().getProperty(scopedUserPropKey_(PRICE_ALERTS_PROP, portfolioId));
+  const saved = getUserProp_(scopedUserPropKey_(PRICE_ALERTS_PROP, portfolioId));
   if (!saved) return [];
   try {
     const parsed = JSON.parse(saved);
@@ -3118,11 +3294,11 @@ function getPriceAlerts(portfolioId) {
 }
 
 function savePriceAlerts_(list, portfolioId) {
-  PropertiesService.getUserProperties().setProperty(scopedUserPropKey_(PRICE_ALERTS_PROP, portfolioId), JSON.stringify(list));
+  setUserProp_(scopedUserPropKey_(PRICE_ALERTS_PROP, portfolioId), JSON.stringify(list));
 }
 
 function getAlertEmail() {
-  const saved = PropertiesService.getUserProperties().getProperty(ALERT_EMAIL_PROP);
+  const saved = getUserProp_(ALERT_EMAIL_PROP);
   if (saved) return saved;
   try {
     const active = Session.getActiveUser().getEmail();
@@ -3140,7 +3316,7 @@ function saveAlertEmail(email) {
   if (clean && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
     return { success: false, error: 'Некорректный email' };
   }
-  PropertiesService.getUserProperties().setProperty(ALERT_EMAIL_PROP, clean);
+  setUserProp_(ALERT_EMAIL_PROP, clean);
   return { success: true, email: clean };
 }
 
@@ -3159,12 +3335,11 @@ function isValidTelegramToken_(token) {
 }
 
 function getTelegramSettings_() {
-  const props = PropertiesService.getUserProperties();
   return {
-    token: props.getProperty(TELEGRAM_BOT_TOKEN_PROP) || '',
-    chatId: props.getProperty(TELEGRAM_CHAT_ID_PROP) || '',
-    botUsername: props.getProperty(TELEGRAM_BOT_USERNAME_PROP) || '',
-    chatLabel: props.getProperty(TELEGRAM_CHAT_LABEL_PROP) || ''
+    token: getUserProp_(TELEGRAM_BOT_TOKEN_PROP) || '',
+    chatId: getUserProp_(TELEGRAM_CHAT_ID_PROP) || '',
+    botUsername: getUserProp_(TELEGRAM_BOT_USERNAME_PROP) || '',
+    chatLabel: getUserProp_(TELEGRAM_CHAT_LABEL_PROP) || ''
   };
 }
 
@@ -3182,6 +3357,21 @@ function telegramStatusFromSettings_(settings) {
 
 function getTelegramBotStatus() {
   return telegramStatusFromSettings_(getTelegramSettings_());
+}
+
+/**
+ * Всё, что нужно панели уведомлений, одним вызовом: список алертов, email,
+ * статус Telegram. Раньше клиент делал три отдельных google.script.run.
+ * Тот же объект кладётся в ответ getTransactions() как alertSettings.
+ */
+function getAlertSettingsBundle() {
+  let alerts = [];
+  try { alerts = getPriceAlerts(); } catch (e) {}
+  let email = '';
+  try { email = getAlertEmail(); } catch (e) {}
+  let telegram = null;
+  try { telegram = getTelegramBotStatus(); } catch (e) {}
+  return { alerts: alerts, email: email, telegram: telegram };
 }
 
 function telegramApi_(token, method, payload) {
@@ -3271,9 +3461,8 @@ function fetchTelegramUpdates_(token) {
 }
 
 function bindTelegramChat_(token, chat) {
-  const props = PropertiesService.getUserProperties();
-  props.setProperty(TELEGRAM_CHAT_ID_PROP, String(chat.id));
-  props.setProperty(TELEGRAM_CHAT_LABEL_PROP, telegramChatLabel_(chat));
+  setUserProp_(TELEGRAM_CHAT_ID_PROP, String(chat.id));
+  setUserProp_(TELEGRAM_CHAT_LABEL_PROP, telegramChatLabel_(chat));
   sendTelegramMessage_(
     token,
     chat.id,
@@ -3366,13 +3555,12 @@ function saveTelegramBotToken(token) {
     return { success: false, error: 'Telegram не принял токен: ' + e.message };
   }
 
-  const props = PropertiesService.getUserProperties();
-  const prev = props.getProperty(TELEGRAM_BOT_TOKEN_PROP) || '';
-  props.setProperty(TELEGRAM_BOT_TOKEN_PROP, clean);
-  props.setProperty(TELEGRAM_BOT_USERNAME_PROP, me.username || '');
+  const prev = getUserProp_(TELEGRAM_BOT_TOKEN_PROP) || '';
+  setUserProp_(TELEGRAM_BOT_TOKEN_PROP, clean);
+  setUserProp_(TELEGRAM_BOT_USERNAME_PROP, me.username || '');
   if (prev && prev !== clean) {
-    props.deleteProperty(TELEGRAM_CHAT_ID_PROP);
-    props.deleteProperty(TELEGRAM_CHAT_LABEL_PROP);
+    deleteUserProp_(TELEGRAM_CHAT_ID_PROP);
+    deleteUserProp_(TELEGRAM_CHAT_LABEL_PROP);
   }
 
   return {
@@ -3385,9 +3573,8 @@ function saveTelegramBotToken(token) {
 }
 
 function clearTelegramChatBinding_() {
-  const props = PropertiesService.getUserProperties();
-  props.deleteProperty(TELEGRAM_CHAT_ID_PROP);
-  props.deleteProperty(TELEGRAM_CHAT_LABEL_PROP);
+  deleteUserProp_(TELEGRAM_CHAT_ID_PROP);
+  deleteUserProp_(TELEGRAM_CHAT_LABEL_PROP);
 }
 
 function connectTelegramChat(chatIdOverride) {
@@ -3403,8 +3590,7 @@ function connectTelegramChat(chatIdOverride) {
     return { success: false, error: 'Не удалось обратиться к боту: ' + e.message };
   }
 
-  const props = PropertiesService.getUserProperties();
-  props.setProperty(TELEGRAM_BOT_USERNAME_PROP, me.username || '');
+  setUserProp_(TELEGRAM_BOT_USERNAME_PROP, me.username || '');
 
   const manualId = parseTelegramChatId_(chatIdOverride);
   if (String(chatIdOverride || '').trim() && !manualId) {
@@ -3448,11 +3634,10 @@ function connectTelegramChat(chatIdOverride) {
 }
 
 function disconnectTelegramBot() {
-  const props = PropertiesService.getUserProperties();
-  props.deleteProperty(TELEGRAM_BOT_TOKEN_PROP);
-  props.deleteProperty(TELEGRAM_CHAT_ID_PROP);
-  props.deleteProperty(TELEGRAM_BOT_USERNAME_PROP);
-  props.deleteProperty(TELEGRAM_CHAT_LABEL_PROP);
+  deleteUserProp_(TELEGRAM_BOT_TOKEN_PROP);
+  deleteUserProp_(TELEGRAM_CHAT_ID_PROP);
+  deleteUserProp_(TELEGRAM_BOT_USERNAME_PROP);
+  deleteUserProp_(TELEGRAM_CHAT_LABEL_PROP);
   return { success: true, status: getTelegramBotStatus() };
 }
 
@@ -4231,8 +4416,7 @@ function maybeNotifyGithubUpdate_() {
   const info = fetchGithubUpdateInfo_(true);
   if (!info.hasUpdate || !info.remoteVersion) return info;
 
-  const props = PropertiesService.getUserProperties();
-  if (props.getProperty(APP_UPDATE_NOTIFIED_PROP) === info.remoteVersion) return info;
+  if (getUserProp_(APP_UPDATE_NOTIFIED_PROP) === info.remoteVersion) return info;
 
   const telegram = getTelegramSettings_();
   if (telegram.token && telegram.chatId) {
@@ -4244,7 +4428,7 @@ function maybeNotifyGithubUpdate_() {
     ].filter(Boolean);
     try {
       sendTelegramMessage_(telegram.token, telegram.chatId, lines.join('\n'));
-      props.setProperty(APP_UPDATE_NOTIFIED_PROP, info.remoteVersion);
+      setUserProp_(APP_UPDATE_NOTIFIED_PROP, info.remoteVersion);
     } catch (e) {
       Logger.log('github update telegram failed: ' + e);
     }
@@ -4266,10 +4450,11 @@ function setupAutoUpdate() {
     if (trigger.getHandlerFunction() === 'updateAllCoins') ScriptApp.deleteTrigger(trigger);
   }
   ScriptApp.newTrigger('updateAllCoins').timeBased().everyHours(1).create();
+  invalidateAutoSyncStatus_();
   return {
     success: true,
     message: 'Триггер установлен: проверка каждый час, запрос к CoinMarketCap — не чаще раза в 2 часа.',
-    autoSync: getAutoSyncStatus()
+    autoSync: getAutoSyncStatus(true)
   };
 }
 
