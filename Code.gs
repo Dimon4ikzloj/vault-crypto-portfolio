@@ -3,7 +3,7 @@ const API_KEY = "YOUR_API_KEY";
 
 // Версия приложения — должна совпадать с VERSION и с VAULT_APP_VERSION в index.html.
 // При релизе поднимай все три, иначе проверка обновлений не сработает.
-const APP_VERSION = '1.2.9';
+const APP_VERSION = '1.2.10';
 const GITHUB_OWNER = 'Dimon4ikzloj';
 const GITHUB_REPO = 'vault-crypto-portfolio';
 const GITHUB_BRANCH = 'main';
@@ -2212,6 +2212,13 @@ function cmcQuoteLatestUrl_(version, param, values) {
     '&aux=' + encodeURIComponent('cmc_rank,num_market_pairs,circulating_supply,total_supply,max_supply,is_active');
 }
 
+function extractChange24h_(coinData) {
+  const quote = coinData && coinData.quote && coinData.quote.USD;
+  if (!quote) return null;
+  const n = Number(quote.percent_change_24h);
+  return isFinite(n) ? n : null;
+}
+
 function persistCoinData(coinData) {
   saveCoinToRegistry(coinData);
 
@@ -2221,11 +2228,13 @@ function persistCoinData(coinData) {
   const registryEntry = lookupRegistry(id);
   const stored = readStoredCoinData(id);
   const cmcRank = extractCmcRank_(coinData);
+  const change24h = extractChange24h_(coinData);
   const entry = {
     id: coinData.id,
     symbol: symbol,
     name: (registryEntry && registryEntry.name) || coinData.name || symbol,
     price: coinData.quote.USD.price,
+    change24h: change24h !== null ? change24h : (stored && isFinite(Number(stored.change24h)) ? Number(stored.change24h) : null),
     cmcRank: cmcRank !== null ? cmcRank : (stored && stored.cmcRank ? stored.cmcRank : null),
     updatedAt: Date.now()
   };
@@ -2486,6 +2495,7 @@ function readCoinMeta(value) {
   const fromRegistry = lookupRegistry(key);
   const stored = readStoredCoinData(key);
   const cmcRank = stored ? parseCmcRank_(stored.cmcRank) : null;
+  const change24h = stored && isFinite(Number(stored.change24h)) ? Number(stored.change24h) : null;
 
   if (fromRegistry && fromRegistry.name) {
     return {
@@ -2494,7 +2504,8 @@ function readCoinMeta(value) {
       name: fromRegistry.name,
       tvSymbol: fromRegistry.tvSymbol || null,
       tvExchange: fromRegistry.tvExchange || null,
-      cmcRank: cmcRank
+      cmcRank: cmcRank,
+      change24h: change24h
     };
   }
 
@@ -2520,6 +2531,7 @@ function readCoinMeta(value) {
           name: parsed.name
         });
         if (!parseCmcRank_(parsed.cmcRank) && cmcRank) parsed.cmcRank = cmcRank;
+        if (!isFinite(Number(parsed.change24h)) && change24h !== null) parsed.change24h = change24h;
         return parsed;
       }
     } catch (e) {}
@@ -2536,6 +2548,7 @@ function readCoinMeta(value) {
       symbol: stored.symbol,
       name: stored.name,
       price: stored.price,
+      change24h: change24h,
       cmcRank: cmcRank
     };
   }
@@ -2563,6 +2576,7 @@ function buildCoinMetaMap(coins) {
         tvSymbol: meta.tvSymbol || null,
         tvExchange: meta.tvExchange || null,
         cmcRank: parseCmcRank_(meta.cmcRank),
+        change24h: isFinite(Number(meta.change24h)) ? Number(meta.change24h) : null,
         resolved: true,
         ambiguous: isAmbiguous
       };
@@ -3206,6 +3220,7 @@ function storeCoinPrice(coinData, cache) {
     symbol: symbol || '',
     name: name,
     price: price,
+    change24h: extractChange24h_(coinData),
     cmcRank: extractCmcRank_(coinData)
   };
 

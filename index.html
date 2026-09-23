@@ -1405,6 +1405,17 @@
 
         .legend-left { display: flex; align-items: center; gap: 8px; }
         .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .legend-item .legend-left span.legend-change {
+            overflow: visible;
+            text-overflow: unset;
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .legend-change.up { color: var(--green); }
+        .legend-change.down { color: var(--red); }
+        .legend-change.flat { color: var(--text-muted); }
 
         /* ── Promo / AI cards ── */
         .promo-card {
@@ -2771,7 +2782,7 @@
                         </button>
                         <button type="button" class="portfolio-add-btn" onclick="openPortfolioModal('create')" title="Создать портфель" aria-label="Создать портфель">+</button>
                     </div>
-                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.9</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
+                    <span class="app-version" id="appVersionBadge" title="Версия приложения">v1.2.10</span><span class="mobile-only" style="margin-left:2px;font-size:10px;color:var(--cyan);font-weight:600;">MOBILE</span>
                 </div>
                 <div class="topbar-right">
                     <button class="btn btn-outline btn-sm mobile-only" id="pwaInstallBtnTop" style="display:none" onclick="installPwaApp()" title="Установить приложение">⬇</button>
@@ -3631,7 +3642,7 @@
         try { allocationSortMode = localStorage.getItem('vaultAllocationSort') || 'default'; } catch (e) {}
         let tradeInputMode = 'price';
         try { tradeInputMode = localStorage.getItem('vaultTradeMode') || 'price'; } catch (e) {}
-        var VAULT_APP_VERSION = '1.2.9';
+        var VAULT_APP_VERSION = '1.2.10';
         var lastAppUpdateInfo = null;
         var currentPortfolios = { activeId: 'default', items: [{ id: 'default', name: 'Портфель' }] };
         var portfolioModalMode = 'create';
@@ -3962,6 +3973,23 @@
             if (!meta || meta.cmcRank == null || meta.cmcRank === '') return null;
             var n = parseInt(meta.cmcRank, 10);
             return (!isNaN(n) && n > 0) ? n : null;
+        }
+
+        function getChange24h(coin) {
+            var meta = getCoinMeta(coin);
+            if (!meta || meta.change24h === null || meta.change24h === undefined || meta.change24h === '') return null;
+            var n = Number(meta.change24h);
+            return isFinite(n) ? n : null;
+        }
+
+        function formatChange24hHtml(coin) {
+            if (isScamCoin(coin)) return '';
+            var n = getChange24h(coin);
+            if (n === null) return '';
+            var cls = n > 0 ? 'up' : (n < 0 ? 'down' : 'flat');
+            var sign = n > 0 ? '+' : '';
+            return '<span class="legend-change ' + cls + '" title="Изменение цены за 24 часа, CoinMarketCap">' +
+                sign + n.toFixed(2) + '%</span>';
         }
 
         function getCoinAvatar(coin) {
@@ -7086,7 +7114,7 @@
                 var coinKey = chartData.coins && chartData.coins[i] ? chartData.coins[i] : null;
                 var itemClass = coinKey ? 'legend-item clickable' : 'legend-item';
                 var clickAttr = coinKey ? ' onclick="selectPortfolioChartCoin(\'' + jsEscape(coinKey) + '\')"' : '';
-                legendHTML += '<div class="' + itemClass + '"' + clickAttr + '><div class="legend-left"><div class="legend-dot" style="background:' + colors[i] + '"></div><span>' + lbl + '</span></div><span class="mono" style="font-size:11px;color:var(--text-muted)">' + formatMoney(chartData.values[i]) + ' · ' + pct + '%</span></div>';
+                legendHTML += '<div class="' + itemClass + '"' + clickAttr + '><div class="legend-left"><div class="legend-dot" style="background:' + colors[i] + '"></div><span>' + lbl + '</span>' + formatChange24hHtml(coinKey) + '</div><span class="mono" style="font-size:11px;color:var(--text-muted)">' + formatMoney(chartData.values[i]) + ' · ' + pct + '%</span></div>';
             });
             legend.innerHTML = legendHTML;
 
